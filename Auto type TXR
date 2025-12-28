@@ -1,0 +1,93 @@
+loadstring([[
+-- ===== SETTINGS =====
+local blacklist = { "badword1", "badword2" } -- words to block
+local usedWords = {} -- tracks used words
+local dictionary = {"apple","banana","cat","dog"} -- replace with your 400k words (optimized)
+local typingSpeed = 0.5 -- seconds between auto types (lower = faster)
+
+-- ===== UTILITY FUNCTIONS =====
+local function pickWord()
+    for i = 1, #dictionary do
+        local word = dictionary[i]
+        if not usedWords[word] and not table.find(blacklist, word) then
+            usedWords[word] = true
+            return word
+        end
+    end
+    return nil
+end
+
+-- ===== PREMIUM THEME UI =====
+local Player = game.Players.LocalPlayer
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TXR_AutoType"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = Player:WaitForChild("PlayerGui")
+
+-- Main Suggestion Box
+local SuggestBox = Instance.new("TextLabel")
+SuggestBox.Size = UDim2.new(0,300,0,40)
+SuggestBox.Position = UDim2.new(0.5,-150,0,50)
+SuggestBox.BackgroundColor3 = Color3.fromRGB(255, 215, 0) -- Premium gold color
+SuggestBox.BorderSizePixel = 2
+SuggestBox.BorderColor3 = Color3.fromRGB(255,255,255)
+SuggestBox.TextColor3 = Color3.fromRGB(0,0,0)
+SuggestBox.TextScaled = true
+SuggestBox.Text = "TXR Premium Auto Type"
+SuggestBox.Visible = true
+SuggestBox.Parent = ScreenGui
+
+-- Background Frame for better premium look
+local BgFrame = Instance.new("Frame")
+BgFrame.Size = UDim2.new(0,300,0,40)
+BgFrame.Position = UDim2.new(0.5,-150,0,50)
+BgFrame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+BgFrame.BorderSizePixel = 0
+BgFrame.BackgroundTransparency = 0.4
+BgFrame.Parent = ScreenGui
+BgFrame.ZIndex = 0
+SuggestBox.ZIndex = 1
+
+local function updateSuggestions()
+    local suggestions = {}
+    for i=1,5 do
+        local word = pickWord()
+        if word then
+            table.insert(suggestions, word)
+        end
+    end
+    SuggestBox.Text = "TXR | Suggestions: "..table.concat(suggestions,", ")
+end
+
+-- ===== AUTO TYPE LOOP =====
+local autoTyping = true
+
+task.spawn(function()
+    while true do
+        task.wait(typingSpeed)
+        if autoTyping then
+            for _, v in pairs(game:GetDescendants()) do
+                if v:IsA("TextBox") and v.Visible and v.TextEditable then
+                    local word = pickWord()
+                    if word then
+                        v.Text = word
+                        updateSuggestions()
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ===== TOGGLE FUNCTION =====
+local UserInputService = game:GetService("UserInputService")
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.T then -- press T to toggle
+        autoTyping = not autoTyping
+        SuggestBox.Text = "TXR | Auto Type: "..(autoTyping and "ON" or "OFF")
+    end
+end)
+
+print("✅ TXR Premium Auto Type Loaded | Press 'T' to toggle")
+]])()
