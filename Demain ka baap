@@ -1,0 +1,576 @@
+-- DaMieN Identity Spoofer + Modern GUI -- RGB for Tag/Title | Display Name Color Changer (ALL COLORS WORKING)
+-- WITH FONTS* BUTTON (Small, Slash, Circled)
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local lp = Players.LocalPlayer
+
+-- Clear any existing GUI first
+for _, v in pairs(CoreGui:GetChildren()) do
+    if v.Name == "DaMieNHackerUI" or v.Name == "DaMieNLoading" or v.Name == "DaMieNKeySystem" then
+        v:Destroy()
+    end
+end
+
+-- Spoofing logic
+local spoofedName = lp.Name
+local spoofedDisplayName = lp.DisplayName
+local originalName = lp.Name
+local originalDisplayName = lp.DisplayName
+local isActive = false
+local rgbEnabled = false
+local rgbColors = {"FF0000", "00FF00", "0000FF", "FFFF00", "FF00FF", "00FFFF", "FFA500", "FF1493"}
+
+-- Display Name Color Settings
+local displayNameColor = "default"
+local colorCodes = {
+    yellow = {code = "FFFF00", rgb = Color3.fromRGB(255, 255, 0)},
+    red = {code = "FF0000", rgb = Color3.fromRGB(255, 0, 0)},
+    blue = {code = "0000FF", rgb = Color3.fromRGB(0, 0, 255)},
+    green = {code = "00FF00", rgb = Color3.fromRGB(0, 255, 0)},
+    orange = {code = "FFA500", rgb = Color3.fromRGB(255, 165, 0)},
+    purple = {code = "800080", rgb = Color3.fromRGB(128, 0, 128)},
+    pink = {code = "FF69B4", rgb = Color3.fromRGB(255, 105, 180)},
+    cyan = {code = "00FFFF", rgb = Color3.fromRGB(0, 255, 255)},
+    white = {code = "FFFFFF", rgb = Color3.fromRGB(255, 255, 255)}
+}
+
+-- Font styles
+local fontStyles = {
+    small = {
+        name = "Sᴍᴀʟʟ",
+        convert = function(str)
+            local smallMap = {
+                a="ᴀ", b="ʙ", c="ᴄ", d="ᴅ", e="ᴇ", f="ғ", g="ɢ", h="ʜ", i="ɪ", j="ᴊ", k="ᴋ", l="ʟ", m="ᴍ",
+                n="ɴ", o="ᴏ", p="ᴘ", q="ǫ", r="ʀ", s="s", t="ᴛ", u="ᴜ", v="ᴠ", w="ᴡ", x="x", y="ʏ", z="ᴢ",
+                A="ᴀ", B="ʙ", C="ᴄ", D="ᴅ", E="ᴇ", F="ғ", G="ɢ", H="ʜ", I="ɪ", J="ᴊ", K="ᴋ", L="ʟ", M="ᴍ",
+                N="ɴ", O="ᴏ", P="ᴘ", Q="ǫ", R="ʀ", S="s", T="ᴛ", U="ᴜ", V="ᴠ", W="ᴡ", X="x", Y="ʏ", Z="ᴢ"
+            }
+            local result = ""
+            for i = 1, #str do
+                local char = str:sub(i, i)
+                result = result .. (smallMap[char] or char)
+            end
+            return result
+        end
+    },
+    slash = {
+        name = "s̸l̸a̸s̸h̸",
+        convert = function(str)
+            local result = ""
+            for i = 1, #str do
+                local char = str:sub(i, i)
+                if char:match("[%w]") then
+                    result = result .. char .. "̸"
+                else
+                    result = result .. char
+                end
+            end
+            return result
+        end
+    },
+    circled = {
+        name = "Ⓒ︎Ⓘ︎Ⓡ︎Ⓒ︎",
+        convert = function(str)
+            local circleMap = {
+                a="ⓐ", b="ⓑ", c="ⓒ", d="ⓓ", e="ⓔ", f="ⓕ", g="ⓖ", h="ⓗ", i="ⓘ", j="ⓙ", k="ⓚ", l="ⓛ", m="ⓜ",
+                n="ⓝ", o="ⓞ", p="ⓟ", q="ⓠ", r="ⓡ", s="ⓢ", t="ⓣ", u="ⓤ", v="ⓥ", w="ⓦ", x="ⓧ", y="ⓨ", z="ⓩ",
+                A="Ⓐ", B="Ⓑ", C="Ⓒ", D="Ⓓ", E="Ⓔ", F="Ⓕ", G="Ⓖ", H="Ⓗ", I="Ⓘ", J="Ⓙ", K="Ⓚ", L="Ⓛ", M="Ⓜ",
+                N="Ⓝ", O="Ⓞ", P="Ⓟ", Q="Ⓠ", R="Ⓡ", S="Ⓢ", T="Ⓣ", U="Ⓤ", V="Ⓥ", W="Ⓦ", X="Ⓧ", Y="Ⓨ", Z="Ⓩ",
+                ["0"]="⓪", ["1"]="①", ["2"]="②", ["3"]="③", ["4"]="④", ["5"]="⑤", ["6"]="⑥", ["7"]="⑦", ["8"]="⑧", ["9"]="⑨"
+            }
+            local result = ""
+            for i = 1, #str do
+                local char = str:sub(i, i)
+                result = result .. (circleMap[char] or char)
+            end
+            return result
+        end
+    }
+}
+
+local activeFont = nil
+local fontPanelVisible = false
+local guiVisible = false
+
+-- ============ CREATE MAIN GUI ============
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DaMieNHackerUI"
+ScreenGui.Parent = CoreGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 0, 30)
+MainFrame.BackgroundTransparency = 0.1
+MainFrame.BorderSizePixel = 0
+MainFrame.Position = UDim2.new(0.5, -200, 0.5, -240)
+MainFrame.Size = UDim2.new(0, 400, 0, 480)
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Visible = true
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Thickness = 2
+MainStroke.Color = Color3.fromRGB(150, 50, 255)
+MainStroke.Transparency = 0.3
+MainStroke.Parent = MainFrame
+
+-- Title with RGB effect
+local Title = Instance.new("TextLabel")
+Title.Parent = MainFrame
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.Text = "DaMieN SPOOFER"
+Title.TextColor3 = Color3.fromRGB(180, 100, 255)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 20
+
+-- RGB Title animation
+coroutine.wrap(function()
+    while Title and Title.Parent do
+        for i = 0, 1, 0.02 do
+            task.wait(0.05)
+            local hue = tick() % 5 / 5
+            Title.TextColor3 = Color3.fromHSV(hue, 1, 1)
+        end
+    end
+end)()
+
+-- Line
+local Line = Instance.new("Frame")
+Line.Parent = MainFrame
+Line.Size = UDim2.new(0.9, 0, 0, 2)
+Line.Position = UDim2.new(0.05, 0, 0.10, 0)
+Line.BackgroundColor3 = Color3.fromRGB(150, 50, 255)
+Line.BackgroundTransparency = 0.5
+Line.BorderSizePixel = 0
+
+-- Status
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Parent = MainFrame
+StatusLabel.Size = UDim2.new(1, 0, 0, 22)
+StatusLabel.Position = UDim2.new(0, 0, 0.14, 0)
+StatusLabel.Text = "⚡ Status: Inactive"
+StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextSize = 12
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+-- Preview
+local PreviewLabel = Instance.new("TextLabel")
+PreviewLabel.Parent = MainFrame
+PreviewLabel.Size = UDim2.new(0.9, 0, 0, 30)
+PreviewLabel.Position = UDim2.new(0.05, 0, 0.20, 0)
+PreviewLabel.Text = "Preview: YourName"
+PreviewLabel.TextColor3 = Color3.fromRGB(200, 150, 255)
+PreviewLabel.BackgroundColor3 = Color3.fromRGB(30, 10, 45)
+PreviewLabel.BackgroundTransparency = 0.5
+PreviewLabel.Font = Enum.Font.Gotham
+PreviewLabel.TextSize = 12
+PreviewLabel.TextXAlignment = Enum.TextXAlignment.Center
+PreviewLabel.RichText = true
+local PreviewCorner = Instance.new("UICorner")
+PreviewCorner.CornerRadius = UDim.new(0, 6)
+PreviewCorner.Parent = PreviewLabel
+
+-- ============ FAKE NAME WITH FONTS* BUTTON ============
+local NameContainer = Instance.new("Frame")
+NameContainer.Parent = MainFrame
+NameContainer.Size = UDim2.new(0.9, 0, 0, 35)
+NameContainer.Position = UDim2.new(0.05, 0, 0.27, 0)
+NameContainer.BackgroundTransparency = 1
+
+local NameBox = Instance.new("TextBox")
+NameBox.Parent = NameContainer
+NameBox.Size = UDim2.new(0.75, -5, 1, 0)
+NameBox.Position = UDim2.new(0, 0, 0, 0)
+NameBox.PlaceholderText = "Enter fake name..."
+NameBox.Text = ""
+NameBox.BackgroundColor3 = Color3.fromRGB(30, 10, 40)
+NameBox.TextColor3 = Color3.new(1, 1, 1)
+NameBox.PlaceholderColor3 = Color3.fromRGB(150, 100, 200)
+NameBox.Font = Enum.Font.Gotham
+NameBox.TextSize = 13
+NameBox.TextXAlignment = Enum.TextXAlignment.Center
+local NameCorner = Instance.new("UICorner")
+NameCorner.CornerRadius = UDim.new(0, 6)
+NameCorner.Parent = NameBox
+
+-- Fonts* Button
+local FontsBtn = Instance.new("TextButton")
+FontsBtn.Parent = NameContainer
+FontsBtn.Size = UDim2.new(0.23, 0, 1, 0)
+FontsBtn.Position = UDim2.new(0.77, 0, 0, 0)
+FontsBtn.Text = "fonts*"
+FontsBtn.TextColor3 = Color3.fromRGB(200, 150, 255)
+FontsBtn.BackgroundColor3 = Color3.fromRGB(50, 20, 80)
+FontsBtn.Font = Enum.Font.GothamBold
+FontsBtn.TextSize = 11
+local FontsBtnCorner = Instance.new("UICorner")
+FontsBtnCorner.CornerRadius = UDim.new(0, 6)
+FontsBtnCorner.Parent = FontsBtn
+
+-- ============ FONT PANEL (POPUP) ============
+local FontPanel = Instance.new("Frame")
+FontPanel.Parent = MainFrame
+FontPanel.Size = UDim2.new(0.9, 0, 0, 100)
+FontPanel.Position = UDim2.new(0.05, 0, 0.34, 0)
+FontPanel.BackgroundColor3 = Color3.fromRGB(25, 5, 40)
+FontPanel.BackgroundTransparency = 0.1
+FontPanel.Visible = false
+local FontPanelCorner = Instance.new("UICorner")
+FontPanelCorner.CornerRadius = UDim.new(0, 8)
+FontPanelCorner.Parent = FontPanel
+
+local FontTitle = Instance.new("TextLabel")
+FontTitle.Parent = FontPanel
+FontTitle.Size = UDim2.new(1, 0, 0, 25)
+FontTitle.Position = UDim2.new(0, 0, 0, 0)
+FontTitle.Text = "CHOOSE FONT STYLE"
+FontTitle.TextColor3 = Color3.fromRGB(180, 130, 255)
+FontTitle.BackgroundTransparency = 1
+FontTitle.Font = Enum.Font.GothamBold
+FontTitle.TextSize = 11
+
+-- Small Font Button
+local SmallFontBtn = Instance.new("TextButton")
+SmallFontBtn.Parent = FontPanel
+SmallFontBtn.Size = UDim2.new(0.3, -5, 0, 30)
+SmallFontBtn.Position = UDim2.new(0.02, 0, 0.35, 0)
+SmallFontBtn.Text = "Sᴍᴀʟʟ"
+SmallFontBtn.TextColor3 = Color3.new(1, 1, 1)
+SmallFontBtn.BackgroundColor3 = Color3.fromRGB(60, 30, 90)
+SmallFontBtn.Font = Enum.Font.GothamBold
+SmallFontBtn.TextSize = 11
+local SmallCorner = Instance.new("UICorner")
+SmallCorner.CornerRadius = UDim.new(0, 5)
+SmallCorner.Parent = SmallFontBtn
+
+-- Slash Font Button
+local SlashFontBtn = Instance.new("TextButton")
+SlashFontBtn.Parent = FontPanel
+SlashFontBtn.Size = UDim2.new(0.3, -5, 0, 30)
+SlashFontBtn.Position = UDim2.new(0.35, 0, 0.35, 0)
+SlashFontBtn.Text = "s̸l̸a̸s̸h̸"
+SlashFontBtn.TextColor3 = Color3.new(1, 1, 1)
+SlashFontBtn.BackgroundColor3 = Color3.fromRGB(60, 30, 90)
+SlashFontBtn.Font = Enum.Font.GothamBold
+SlashFontBtn.TextSize = 11
+local SlashCorner = Instance.new("UICorner")
+SlashCorner.CornerRadius = UDim.new(0, 5)
+SlashCorner.Parent = SlashFontBtn
+
+-- Circled Font Button
+local CircledFontBtn = Instance.new("TextButton")
+CircledFontBtn.Parent = FontPanel
+CircledFontBtn.Size = UDim2.new(0.3, -5, 0, 30)
+CircledFontBtn.Position = UDim2.new(0.68, 0, 0.35, 0)
+CircledFontBtn.Text = "Ⓒ︎Ⓘ︎Ⓡ︎Ⓒ︎"
+CircledFontBtn.TextColor3 = Color3.new(1, 1, 1)
+CircledFontBtn.BackgroundColor3 = Color3.fromRGB(60, 30, 90)
+CircledFontBtn.Font = Enum.Font.GothamBold
+CircledFontBtn.TextSize = 11
+local CircledCorner = Instance.new("UICorner")
+CircledCorner.CornerRadius = UDim.new(0, 5)
+CircledCorner.Parent = CircledFontBtn
+
+-- Reset Font Button
+local ResetFontBtn = Instance.new("TextButton")
+ResetFontBtn.Parent = FontPanel
+ResetFontBtn.Size = UDim2.new(0.96, 0, 0, 25)
+ResetFontBtn.Position = UDim2.new(0.02, 0, 0.70, 0)
+ResetFontBtn.Text = "RESET FONT (NORMAL)"
+ResetFontBtn.TextColor3 = Color3.fromRGB(255, 150, 150)
+ResetFontBtn.BackgroundColor3 = Color3.fromRGB(80, 30, 60)
+ResetFontBtn.Font = Enum.Font.GothamBold
+ResetFontBtn.TextSize = 10
+local ResetCorner = Instance.new("UICorner")
+ResetCorner.CornerRadius = UDim.new(0, 5)
+ResetCorner.Parent = ResetFontBtn
+
+-- Update preview with font
+local function updatePreviewWithFont(text)
+    if text == nil or text == "" then
+        text = "YourName"
+    end
+    local finalText = text
+    if activeFont then
+        finalText = activeFont.convert(text)
+    end
+    
+    if rgbEnabled then
+        local colorText = ""
+        for i = 1, #finalText do
+            local char = finalText:sub(i, i)
+            local color = rgbColors[(i-1) % #rgbColors + 1]
+            colorText = colorText .. '<font color="#' .. color .. '">' .. char .. '</font>'
+        end
+        PreviewLabel.Text = "Preview: " .. colorText
+        PreviewLabel.RichText = true
+    elseif displayNameColor ~= "default" then
+        local colorCode = colorCodes[displayNameColor].code
+        PreviewLabel.Text = 'Preview: <font color="#' .. colorCode .. '">' .. finalText .. '</font>'
+        PreviewLabel.RichText = true
+    else
+        PreviewLabel.Text = "Preview: " .. finalText
+        PreviewLabel.RichText = false
+    end
+end
+
+-- Font panel toggle
+local function toggleFontPanel()
+    fontPanelVisible = not fontPanelVisible
+    FontPanel.Visible = fontPanelVisible
+    if fontPanelVisible then
+        MainFrame.Size = UDim2.new(0, 400, 0, 520)
+    else
+        MainFrame.Size = UDim2.new(0, 400, 0, 480)
+    end
+end
+
+FontsBtn.MouseButton1Click:Connect(toggleFontPanel)
+
+-- Font selection
+SmallFontBtn.MouseButton1Click:Connect(function()
+    activeFont = fontStyles.small
+    updatePreviewWithFont(NameBox.Text)
+    toggleFontPanel()
+end)
+
+SlashFontBtn.MouseButton1Click:Connect(function()
+    activeFont = fontStyles.slash
+    updatePreviewWithFont(NameBox.Text)
+    toggleFontPanel()
+end)
+
+CircledFontBtn.MouseButton1Click:Connect(function()
+    activeFont = fontStyles.circled
+    updatePreviewWithFont(NameBox.Text)
+    toggleFontPanel()
+end)
+
+ResetFontBtn.MouseButton1Click:Connect(function()
+    activeFont = nil
+    updatePreviewWithFont(NameBox.Text)
+    toggleFontPanel()
+end)
+
+-- Update preview on name change
+NameBox:GetPropertyChangedSignal("Text"):Connect(function()
+    updatePreviewWithFont(NameBox.Text)
+end)
+
+-- ============ DISPLAY NAME COLOR SECTION ============
+local ColorLabel = Instance.new("TextLabel")
+ColorLabel.Parent = MainFrame
+ColorLabel.Size = UDim2.new(0.9, 0, 0, 20)
+ColorLabel.Position = UDim2.new(0.05, 0, 0.46, 0)
+ColorLabel.Text = "DISPLAY NAME COLOR:"
+ColorLabel.TextColor3 = Color3.fromRGB(200, 150, 255)
+ColorLabel.BackgroundTransparency = 1
+ColorLabel.Font = Enum.Font.GothamBold
+ColorLabel.TextSize = 11
+ColorLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local ColorContainer = Instance.new("Frame")
+ColorContainer.Parent = MainFrame
+ColorContainer.Size = UDim2.new(0.9, 0, 0, 80)
+ColorContainer.Position = UDim2.new(0.05, 0, 0.50, 0)
+ColorContainer.BackgroundTransparency = 1
+
+local colors = {"yellow", "red", "blue", "green", "orange", "purple", "pink", "cyan", "white"}
+local colorButtons = {}
+
+for i, color in ipairs(colors) do
+    local btn = Instance.new("TextButton")
+    btn.Parent = ColorContainer
+    btn.Size = UDim2.new(0.18, -2, 0, 25)
+    btn.Position = UDim2.new((i-1) * 0.105, 0, 0, 0)
+    btn.Text = color:sub(1,1):upper() .. color:sub(2)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.BackgroundColor3 = colorCodes[color].rgb
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 9
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 4)
+    btnCorner.Parent = btn
+    
+    btn.MouseButton1Click:Connect(function()
+        displayNameColor = color
+        for _, b in pairs(colorButtons) do
+            b.BackgroundTransparency = 0
+        end
+        btn.BackgroundTransparency = 0.5
+        updatePreviewWithFont(NameBox.Text)
+    end)
+    
+    table.insert(colorButtons, btn)
+end
+
+-- Default button
+local DefaultColorBtn = Instance.new("TextButton")
+DefaultColorBtn.Parent = ColorContainer
+DefaultColorBtn.Size = UDim2.new(0.18, -2, 0, 25)
+DefaultColorBtn.Position = UDim2.new(0.84, 0, 0, 0)
+DefaultColorBtn.Text = "DEFAULT"
+DefaultColorBtn.TextColor3 = Color3.new(1, 1, 1)
+DefaultColorBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+DefaultColorBtn.Font = Enum.Font.GothamBold
+DefaultColorBtn.TextSize = 9
+local DefaultCorner = Instance.new("UICorner")
+DefaultCorner.CornerRadius = UDim.new(0, 4)
+DefaultCorner.Parent = DefaultColorBtn
+
+DefaultColorBtn.MouseButton1Click:Connect(function()
+    displayNameColor = "default"
+    for _, b in pairs(colorButtons) do
+        b.BackgroundTransparency = 0
+    end
+    DefaultColorBtn.BackgroundTransparency = 0.5
+    updatePreviewWithFont(NameBox.Text)
+end)
+
+-- ============ RGB TOGGLE ============
+local RGBToggleBtn = Instance.new("TextButton")
+RGBToggleBtn.Parent = MainFrame
+RGBToggleBtn.Size = UDim2.new(0.44, -5, 0, 35)
+RGBToggleBtn.Position = UDim2.new(0.05, 0, 0.62, 0)
+RGBToggleBtn.Text = "🌈 RGB MODE OFF"
+RGBToggleBtn.TextColor3 = Color3.new(1, 1, 1)
+RGBToggleBtn.BackgroundColor3 = Color3.fromRGB(100, 50, 150)
+RGBToggleBtn.Font = Enum.Font.GothamBold
+RGBToggleBtn.TextSize = 12
+local RGBBtnCorner = Instance.new("UICorner")
+RGBBtnCorner.CornerRadius = UDim.new(0, 6)
+RGBBtnCorner.Parent = RGBToggleBtn
+
+RGBToggleBtn.MouseButton1Click:Connect(function()
+    rgbEnabled = not rgbEnabled
+    if rgbEnabled then
+        RGBToggleBtn.Text = "🌈 RGB MODE ON"
+        RGBToggleBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 200)
+        displayNameColor = "default"
+        for _, b in pairs(colorButtons) do
+            b.BackgroundTransparency = 0
+        end
+        DefaultColorBtn.BackgroundTransparency = 0
+    else
+        RGBToggleBtn.Text = "🌈 RGB MODE OFF"
+        RGBToggleBtn.BackgroundColor3 = Color3.fromRGB(100, 50, 150)
+    end
+    updatePreviewWithFont(NameBox.Text)
+end)
+
+-- ============ APPLY BUTTON ============
+local ApplyBtn = Instance.new("TextButton")
+ApplyBtn.Parent = MainFrame
+ApplyBtn.Size = UDim2.new(0.44, -5, 0, 35)
+ApplyBtn.Position = UDim2.new(0.51, 0, 0.62, 0)
+ApplyBtn.Text = "✓ APPLY SPOOF"
+ApplyBtn.TextColor3 = Color3.new(1, 1, 1)
+ApplyBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+ApplyBtn.Font = Enum.Font.GothamBold
+ApplyBtn.TextSize = 12
+local ApplyCorner = Instance.new("UICorner")
+ApplyCorner.CornerRadius = UDim.new(0, 6)
+ApplyCorner.Parent = ApplyBtn
+
+-- Apply spoof function
+local function applySpoof()
+    local newName = NameBox.Text
+    if newName == nil or newName == "" then
+        newName = originalName
+    end
+    
+    local finalName = newName
+    if activeFont then
+        finalName = activeFont.convert(newName)
+    end
+    
+    spoofedName = finalName
+    
+    if rgbEnabled then
+        local r, g, b = 255, 0, 0
+        local function updateColor()
+            if not isActive then return end
+            r = (r + 5) % 255
+            g = (g + 3) % 255
+            b = (b + 7) % 255
+            lp.DisplayName = '<font color="rgb(' .. r .. ',' .. g .. ',' .. b .. ')">' .. spoofedName .. '</font>'
+            task.wait(0.05)
+            if rgbEnabled and isActive then updateColor() end
+        end
+        coroutine.wrap(updateColor)()
+    elseif displayNameColor ~= "default" then
+        local colorCode = colorCodes[displayNameColor].code
+        lp.DisplayName = '<font color="#' .. colorCode .. '">' .. spoofedName .. '</font>'
+    else
+        lp.DisplayName = spoofedName
+    end
+    
+    isActive = true
+    StatusLabel.Text = "✅ Status: Active - " .. spoofedName
+    StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+end
+
+ApplyBtn.MouseButton1Click:Connect(applySpoof)
+
+-- ============ RESET BUTTON ============
+local ResetBtn = Instance.new("TextButton")
+ResetBtn.Parent = MainFrame
+ResetBtn.Size = UDim2.new(0.9, 0, 0, 35)
+ResetBtn.Position = UDim2.new(0.05, 0, 0.70, 0)
+ResetBtn.Text = "⟳ RESET TO ORIGINAL"
+ResetBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+ResetBtn.BackgroundColor3 = Color3.fromRGB(80, 20, 50)
+ResetBtn.Font = Enum.Font.GothamBold
+ResetBtn.TextSize = 12
+local ResetCornerBig = Instance.new("UICorner")
+ResetCornerBig.CornerRadius = UDim.new(0, 6)
+ResetCornerBig.Parent = ResetBtn
+
+ResetBtn.MouseButton1Click:Connect(function()
+    isActive = false
+    rgbEnabled = false
+    RGBToggleBtn.Text = "🌈 RGB MODE OFF"
+    RGBToggleBtn.BackgroundColor3 = Color3.fromRGB(100, 50, 150)
+    displayNameColor = "default"
+    for _, b in pairs(colorButtons) do
+        b.BackgroundTransparency = 0
+    end
+    DefaultColorBtn.BackgroundTransparency = 0
+    activeFont = nil
+    NameBox.Text = ""
+    lp.DisplayName = originalDisplayName
+    updatePreviewWithFont("")
+    StatusLabel.Text = "⚡ Status: Inactive"
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+end)
+
+-- ============ CLOSE BUTTON ============
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Parent = MainFrame
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 18
+CloseBtn.BorderSizePixel = 0
+
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    guiVisible = false
+end)
+
+--
