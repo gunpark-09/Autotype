@@ -93,7 +93,7 @@ local fontStyles = {
 
 local activeFont = nil
 local fontPanelVisible = false
-local guiVisible = false
+local guiVisible = true
 
 -- ============ CREATE MAIN GUI ============
 local ScreenGui = Instance.new("ScreenGui")
@@ -573,4 +573,76 @@ CloseBtn.MouseButton1Click:Connect(function()
     guiVisible = false
 end)
 
---
+-- ============ DRAG BUTTON ============
+local DragHandle = Instance.new("TextButton")
+DragHandle.Parent = MainFrame
+DragHandle.Size = UDim2.new(1, 0, 0, 30)
+DragHandle.Position = UDim2.new(0, 0, 0, 0)
+DragHandle.BackgroundTransparency = 1
+DragHandle.Text = ""
+DragHandle.ZIndex = 2
+
+local dragging = false
+local dragStartPos = nil
+local startMousePos = nil
+
+DragHandle.MouseButton1Down:Connect(function(x, y)
+    dragging = true
+    dragStartPos = MainFrame.Position
+    startMousePos = Vector2.new(x, y)
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = Vector2.new(input.Position.X, input.Position.Y) - startMousePos
+        MainFrame.Position = UDim2.new(dragStartPos.X.Scale, dragStartPos.X.Offset + delta.X, dragStartPos.Y.Scale, dragStartPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- ============ OPEN GUI BUTTON (Small toggle on screen) ============
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Parent = ScreenGui
+ToggleButton.Size = UDim2.new(0, 50, 0, 50)
+ToggleButton.Position = UDim2.new(0, 10, 0, 100)
+ToggleButton.Text = "🔓"
+ToggleButton.TextColor3 = Color3.new(1, 1, 1)
+ToggleButton.TextSize = 24
+ToggleButton.BackgroundColor3 = Color3.fromRGB(100, 50, 200)
+ToggleButton.Font = Enum.Font.GothamBold
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0)
+ToggleCorner.Parent = ToggleButton
+local ToggleStroke = Instance.new("UIStroke")
+ToggleStroke.Thickness = 2
+ToggleStroke.Color = Color3.fromRGB(200, 100, 255)
+ToggleStroke.Parent = ToggleButton
+
+ToggleButton.MouseButton1Click:Connect(function()
+    guiVisible = not guiVisible
+    MainFrame.Visible = guiVisible
+    if fontPanelVisible then
+        toggleFontPanel()
+    end
+end)
+
+-- Pulsing animation for toggle button
+coroutine.wrap(function()
+    while ToggleButton and ToggleButton.Parent do
+        TweenService:Create(ToggleButton, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Size = UDim2.new(0, 55, 0, 55)}):Play()
+        task.wait(0.5)
+        TweenService:Create(ToggleButton, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Size = UDim2.new(0, 50, 0, 50)}):Play()
+        task.wait(0.5)
+    end
+end)()
+
+-- Initial preview
+updatePreviewWithFont("")
+
+print("DaMieN Spoofer Loaded Successfully!")
