@@ -1,0 +1,279 @@
+-- ANUxCHAT by S1R.ANURAG
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+local Username = LocalPlayer.Name
+
+-- ================== CONFIG ==================
+local Admins = {
+    ["anuragisbck"] = true,
+    ["TXRDragon1"] = true
+}
+
+local OwnerRGB = Color3.fromRGB(255, 0, 255) -- Purple RGB for owners
+local ScriptName = "ANUxCHAT"
+
+local AI_API_KEY = "gsk_GOx5EU8cnBgimyo5W0RTWGdyb3FYs3jpePh6KZiFO3KS7D0Vlb8"
+local GROQ_API = "https://api.groq.com/openai/v1/chat/completions"
+
+local spamDelay = 1
+local isSpamming = false
+local currentSpamText = ""
+
+-- ================== GUI CREATION ==================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ANUxCHAT"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = CoreGui
+
+-- Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 420, 0, 520)
+MainFrame.Position = UDim2.new(0.5, -210, 0.5, -260)
+MainFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 12)
+UICorner.Parent = MainFrame
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 50)
+Title.BackgroundTransparency = 1
+Title.Text = "S1R.ANURAG"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextScaled = true
+Title.Font = Enum.Font.GothamBold
+Title.RichText = true
+Title.Text = "<b><i>S1R.ANURAG</i></b>"
+Title.Parent = MainFrame
+
+-- Red Close/Minimize Button
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 10)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.new(1,1,1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextScaled = true
+CloseBtn.Parent = MainFrame
+
+local CloseCorner = Instance.new("UICorner", CloseBtn)
+
+-- Chat Box
+local ChatFrame = Instance.new("ScrollingFrame")
+ChatFrame.Size = UDim2.new(1, -20, 0, 320)
+ChatFrame.Position = UDim2.new(0, 10, 0, 60)
+ChatFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ChatFrame.ScrollBarThickness = 6
+ChatFrame.Parent = MainFrame
+
+local ChatLayout = Instance.new("UIListLayout", ChatFrame)
+ChatLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ChatLayout.Padding = UDim.new(0, 4)
+
+-- Chat Input
+local InputBox = Instance.new("TextBox")
+InputBox.Size = UDim2.new(1, -80, 0, 40)
+InputBox.Position = UDim2.new(0, 10, 1, -50)
+InputBox.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+InputBox.PlaceholderText = "Type message here..."
+InputBox.TextColor3 = Color3.new(1,1,1)
+InputBox.Parent = MainFrame
+
+local SendBtn = Instance.new("TextButton")
+SendBtn.Size = UDim2.new(0, 60, 0, 40)
+SendBtn.Position = UDim2.new(1, -70, 1, -50)
+SendBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+SendBtn.Text = "Send"
+SendBtn.TextColor3 = Color3.new(1,1,1)
+SendBtn.Parent = MainFrame
+
+-- Top Buttons
+local AdminBtn = Instance.new("TextButton")
+AdminBtn.Size = UDim2.new(0.48, 0, 0, 35)
+AdminBtn.Position = UDim2.new(0.02, 0, 0, 410)
+AdminBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+AdminBtn.Text = "Admin Panel"
+AdminBtn.TextColor3 = Color3.new(1,1,1)
+AdminBtn.Parent = MainFrame
+
+local SpamBtn = Instance.new("TextButton")
+SpamBtn.Size = UDim2.new(0.48, 0, 0, 35)
+SpamBtn.Position = UDim2.new(0.5, 0, 0, 410)
+SpamBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+SpamBtn.Text = "Spam GUI"
+SpamBtn.TextColor3 = Color3.new(1,1,1)
+SpamBtn.Parent = MainFrame
+
+-- Minimize Circle
+local MinimizeCircle = Instance.new("Frame")
+MinimizeCircle.Size = UDim2.new(0, 60, 0, 60)
+MinimizeCircle.Position = UDim2.new(0, 20, 1, -80)
+MinimizeCircle.BackgroundColor3 = Color3.fromRGB(255, 0, 100)
+MinimizeCircle.Visible = false
+MinimizeCircle.Parent = ScreenGui
+
+local CircleCorner = Instance.new("UICorner", MinimizeCircle)
+CircleCorner.CornerRadius = UDim.new(1, 0)
+
+local CircleLabel = Instance.new("TextLabel", MinimizeCircle)
+CircleLabel.Size = UDim2.new(1,0,1,0)
+CircleLabel.BackgroundTransparency = 1
+CircleLabel.Text = "O"
+CircleLabel.TextColor3 = Color3.new(1,1,1)
+CircleLabel.TextScaled = true
+CircleLabel.Font = Enum.Font.GothamBold
+
+-- ================== FUNCTIONS ==================
+local function addChatMessage(msg, isOwner)
+    local msgLabel = Instance.new("TextLabel")
+    msgLabel.Size = UDim2.new(1, -10, 0, 0)
+    msgLabel.BackgroundTransparency = 1
+    msgLabel.TextWrapped = true
+    msgLabel.TextXAlignment = Enum.TextXAlignment.Left
+    msgLabel.Font = Enum.Font.Gotham
+    msgLabel.TextSize = 14
+    msgLabel.RichText = true
+    
+    if isOwner then
+        msgLabel.TextColor3 = OwnerRGB
+        msgLabel.Text = "<b>[OWNER]</b> " .. msg
+    else
+        msgLabel.TextColor3 = Color3.new(1,1,1)
+        msgLabel.Text = msg
+    end
+    
+    msgLabel.Parent = ChatFrame
+    ChatFrame.CanvasPosition = Vector2.new(0, ChatFrame.AbsoluteCanvasSize.Y)
+end
+
+local function announceExecution()
+    local tag = Admins[Username] and "Admin" or "User"
+    addChatMessage(Username .. " " .. tag .. " has executed " .. ScriptName, true)
+end
+
+-- AI Call
+local function callAI(prompt)
+    local data = {
+        model = "llama3-70b-8192",
+        messages = {{role = "user", content = prompt}},
+        temperature = 0.7,
+        max_tokens = 300
+    }
+    
+    local success, response = pcall(function()
+        return HttpService:PostAsync(GROQ_API, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson, false, {["Authorization"] = "Bearer " .. AI_API_KEY})
+    end)
+    
+    if success then
+        local decoded = HttpService:JSONDecode(response)
+        return decoded.choices[1].message.content
+    end
+    return "AI Error"
+end
+
+-- Spam Function
+local function startSpam()
+    isSpamming = true
+    spawn(function()
+        while isSpamming do
+            game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(currentSpamText, "All")
+            wait(spamDelay)
+        end
+    end)
+end
+
+-- ================== CONNECTIONS ==================
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    MinimizeCircle.Visible = true
+end)
+
+MinimizeCircle.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        MainFrame.Visible = true
+        MinimizeCircle.Visible = false
+    end
+end)
+
+SendBtn.MouseButton1Click:Connect(function()
+    if InputBox.Text \~= "" then
+        -- Here you can add your own chat system (webhook / DataStore etc.)
+        addChatMessage(Username .. ": " .. InputBox.Text, Admins[Username])
+        InputBox.Text = ""
+        
+        -- AI Monitoring
+        spawn(function()
+            local aiResp = callAI("Chat mein koi hate de raha hai kya? Message: " .. InputBox.Text)
+            if string.find(aiResp:lower(), "hate") or string.find(aiResp:lower(), "h8") then
+                addChatMessage("[AI] ⚠️ Koi hate/spam detect hua!", true)
+            end
+        end)
+    end
+end)
+
+SpamBtn.MouseButton1Click:Connect(function()
+    -- Simple Spam GUI (you can expand)
+    local spamGui = Instance.new("Frame")
+    spamGui.Size = UDim2.new(0, 300, 0, 200)
+    spamGui.Position = UDim2.new(0.5, -150, 0.5, -100)
+    spamGui.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    spamGui.Parent = ScreenGui
+    
+    local tb = Instance.new("TextBox", spamGui)
+    tb.Size = UDim2.new(1, -20, 0, 50)
+    tb.Position = UDim2.new(0,10,0,10)
+    tb.PlaceholderText = "Spam Text"
+    
+    local startB = Instance.new("TextButton", spamGui)
+    startB.Size = UDim2.new(0.5, -15, 0, 40)
+    startB.Position = UDim2.new(0,10,0,70)
+    startB.Text = "START SPAM"
+    startB.BackgroundColor3 = Color3.fromRGB(0,170,0)
+    
+    startB.MouseButton1Click:Connect(function()
+        currentSpamText = tb.Text
+        startSpam()
+    end)
+end)
+
+AdminBtn.MouseButton1Click:Connect(function()
+    if not Admins[Username] then 
+        addChatMessage("Sirf Owners/Admin hi access kar sakte hain!", true)
+        return 
+    end
+    addChatMessage("Admin Panel Opened (Features coming...)", true)
+    -- You can expand full admin panel here
+end)
+
+-- ================== COMMANDS ==================
+game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.OnMessageDoneFiltering.OnClientEvent:Connect(function(msg)
+    if msg.Message:lower():find("^!spam") then
+        currentSpamText = msg.Message:sub(7)
+        addChatMessage("Spam set: " .. currentSpamText, true)
+    elseif msg.Message:lower():find("^!delay") then
+        local delay = tonumber(msg.Message:sub(8))
+        if delay then
+            spamDelay = delay
+            addChatMessage("Spam delay set to: " .. delay, true)
+        end
+    elseif msg.Message:lower():find("^!ai add") then
+        local feature = msg.Message:sub(9)
+        addChatMessage("AI Feature Added: " .. feature, true)
+    end
+end)
+
+-- ================== INIT ==================
+announceExecution()
+addChatMessage("ANUxCHAT Loaded Successfully! Welcome " .. Username, true)
+
+print("ANUxCHAT Loaded by S1R.ANURAG")
