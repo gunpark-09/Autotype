@@ -1,0 +1,308 @@
+--[[ 
+    CREDITS: Dev by anurag ka beta mickey
+    THANKS: Thank for using cracked fonts
+]]
+
+--// SERVICES
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local plr = Players.LocalPlayer
+
+--// DYNAMIC REMOTE FINDER
+local NameRemote, SideRemote, ColorRemote
+for _, v in pairs(ReplicatedStorage:GetDescendants()) do
+    if v:IsA("RemoteEvent") then
+        if v.Name:find("Nam1eTex1t") then NameRemote = v end
+        if v.Name:find("Des1criptionTex1t") then SideRemote = v end
+        if v.Name:find("Colo1r") then ColorRemote = v end
+    end
+end
+
+--// DARK HINDI RIZZ (30 LINES)
+local RizzLines = {
+    "Aapki aankhein itni gehri hain, lagta hai doobna hi naseeb hai. 🌚",
+    "Dil toh kabka chura liya tha, ab jaan ki baari hai?",
+    "Mera dil tere liye dharakta hai, ya shayad ye maut ki dastak hai.",
+    "Aapki smile qatl-e-aam kar degi ek din.",
+    "Jannat nahi chahiye, bas aapke saath ek narak ka safar kafi hai.",
+    "Mohabbat ya saza? Aap jo bhi de, manzoor hai.",
+    "Aap zeher bhi degi toh has kar pee lenge.",
+    "Aapki khamoshi meri rooh cheer deti hai. 🌚",
+    "Kismat mein maut likhi thi, par aapne toh zinda hi maar diya.",
+    "Aapka nasha sharab se zyada khatarnak hai.",
+    "Mera qabr par aapka naam hona chahiye.",
+    "Aapke bina jeena ek kaala sapna jaisa hai.",
+    "Aapke liye duniya jala sakta hoon, ya shayad khud ko.",
+    "Ishq ka kaala rang... aapki tarah. 🌚",
+    "Main bura hoon, par aapke liye badalna nahi chahta.",
+    "Aapki ek nazar kaafi hai tabahi machane k liye.",
+    "Suna hai aapka dil pathar ka hai? Mujhe chot pasand hai.",
+    "Aap meri wo galti ho jo main baar-baar karna chahta hoon.",
+    "Andhera pasand hai mujhe, kyunki usme sirf aap dikhte ho.",
+    "Aapki baaton mein jadoo hai ya koi kaala ilm?",
+    "Main aag hoon, par aapke paas aake thanda pad jata hoon.",
+    "Aapko paana meri zid hai, chahay duniya khatam ho jaye.",
+    "Mera dil ek jail hai, aur aap uski permanent qaidi.",
+    "Aapki parchaayi se bhi ishq ho gaya hai.",
+    "Aap meri rooh ki wo pyaas ho jo kabhi nahi bujhegi.",
+    "Sahi aur galat ka pata nahi, bas aap chahiye.",
+    "Aapke sath marna bhi ek khoobsurat khwab hai.",
+    "Main bhatka hua musafir hoon, aap meri manzil ban jao.",
+    "Aapki aankhon mein shaitaan dikhta hai, mujhe pasand hai. 🌚",
+    "Mera har ek lafz aapki tareef mein fana hai."
+}
+
+--// FONT DATA MAPS
+local Maps = {
+    Cyrillic = {["a"]="Л",["b"]="в",["c"]="с",["d"]="ԁ",["e"]="е",["f"]="ғ",["g"]="ɢ",["h"]="н",["i"]="і",["j"]="ј",["k"]="к",["l"]="і",["m"]="м",["n"]="и",["o"]="о",["p"]="р",["q"]="ԛ",["r"]="г",["s"]="ѕ",["t"]="т",["u"]="υ",["v"]="ѵ",["w"]="ѡ",["x"]="х",["y"]="у",["z"]="ᴢ"},
+    Greek = {["a"]="α",["b"]="β",["c"]="ψ",["d"]="δ",["e"]="ε",["f"]="φ",["g"]="γ",["h"]="η",["i"]="ι",["j"]="ξ",["k"]="κ",["l"]="λ",["m"]="μ",["n"]="ν",["o"]="ο",["p"]="π",["q"]="θ",["r"]="ρ",["s"]="σ",["t"]="τ",["u"]="υ",["v"]="ω",["w"]="ς",["x"]="χ",["y"]="ψ",["z"]="ζ"},
+    Japan = {["a"]="丹",["b"]="乃",["c"]="匚",["d"]="刀",["e"]="モ",["f"]="下",["g"]="ム",["h"]="卄",["i"]="工",["j"]="Ｊ",["k"]="Ｋ",["l"]="ㄥ",["m"]="爪",["n"]="れ",["o"]="口",["p"]="ㄗ",["q"]="Ｑ",["r"]="尺",["s"]="Ｓ",["t"]="Ｔ",["u"]="∪",["v"]="∨",["w"]="山",["x"]="メ",["y"]="ㄚ",["z"]="乙"},
+    Square = {["a"]="🄰",["b"]="🄱",["c"]="🄲",["d"]="🄳",["e"]="🄴",["f"]="🄵",["g"]="🄶",["h"]="🄷",["i"]="🄸",["j"]="🄹",["k"]="🄺",["l"]="🄻",["m"]="🄼",["n"]="🄽",["o"]="🄾",["p"]="🄿",["q"]="🅀",["r"]="🅁",["s"]="🅂",["t"]="🅃",["u"]="🅄",["v"]="🅅",["w"]="🅆",["x"]="🅇",["y"]="🅈",["z"]="🅉"},
+    SmallCaps = {["a"]="ᴀ",["b"]="ʙ",["c"]="ᴄ",["d"]="ᴅ",["e"]="ᴇ",["f"]="ғ",["g"]="ɢ",["h"]="ʜ",["i"]="ɪ",["j"]="ᴊ",["k"]="ᴋ",["l"]="ʟ",["m"]="ᴍ",["n"]="ɴ",["o"]="ᴏ",["p"]="ᴘ",["q"]="ǫ",["r"]="ʀ",["s"]="s",["t"]="ᴛ",["u"]="ᴜ",["v"]="ᴠ",["w"]="ᴡ",["x"]="x",["y"]="ʏ",["z"]="ᴢ"},
+    Thai = {["a"]="ค",["b"]="๒",["c"]="ς",["d"]="๔",["e"]="є",["f"]="Ŧ",["g"]="ﻮ",["h"]="ђ",["i"]="เ",["j"]="ן",["k"]="к",["l"]="เ",["m"]="๓",["n"]="ภ",["o"]="๏",["p"]="ק",["q"]="ợ",["r"]="г",["s"]="ร",["t"]="т",["u"]="ย",["v"]="ง",["w"]="ฬ",["x"]="ץ",["y"]="ץ",["z"]="z"},
+    Bubbles = {["a"]="ⓐ",["b"]="ⓑ",["c"]="ⓒ",["d"]="ⓓ",["e"]="ⓔ",["f"]="ⓕ",["g"]="ⓖ",["h"]="ⓗ",["i"]="ⓘ",["j"]="ⓙ",["k"]="ⓚ",["l"]="ⓛ",["m"]="ⓜ",["n"]="ⓝ",["o"]="ⓞ",["p"]="ⓟ",["q"]="ⓠ",["r"]="ⓡ",["s"]="ⓢ",["t"]="ⓣ",["u"]="ⓤ",["v"]="ⓥ",["w"]="ⓦ",["x"]="ⓧ",["y"]="ⓨ",["z"]="ⓩ"}
+}
+
+local function build(t, map)
+    local res = ""
+    for i = 1, #t do
+        local c = t:sub(i,i):lower()
+        res = res .. (map[c] or c)
+    end
+    return res
+end
+
+local FONTS = {
+    {F = function(t) return "🕷️ " .. build(t, Maps.Cyrillic):upper() .. " 🕷️" end},
+    {F = function(t) return "💎 " .. build(t, Maps.Greek) .. " 💎" end},
+    {F = function(t) return "⚡ " .. build(t, Maps.Cyrillic):upper() .. " ⚡" end},
+    {F = function(t) return "✝ " .. build(t, Maps.Cyrillic):upper() .. " ✝" end},
+    {F = function(t) return "🌸 " .. build(t, Maps.SmallCaps) .. " 🌸" end},
+    {F = function(t) return "♬ " .. build(t, Maps.Thai) .. " ♬" end},
+    {F = function(t) return "⚔ " .. build(t, Maps.Thai) .. " ⚔" end},
+    {F = function(t) return "💥 " .. build(t, Maps.SmallCaps):upper() .. " 💥" end},
+    {F = function(t) return "🚀 " .. build(t, Maps.Square) .. " 🚀" end},
+    {F = function(t) return "🎀 " .. build(t, Maps.Bubbles) .. " 🎀" end},
+    {F = function(t) return "🏴‍☠️ " .. build(t, Maps.SmallCaps) .. " 🏴‍☠️" end},
+    {F = function(t) return "🔥 " .. build(t, Maps.Japan) .. " 🔥" end}
+}
+
+--// STATE
+local Cycling, RGBActive, HuYaarActive, FontIdx = false, false, false, 1
+local Visible = false
+
+--// MAIN GUI
+local gui = Instance.new("ScreenGui", plr.PlayerGui)
+gui.Name = "ASHUxANURAGFontsFinal"
+
+--// INTRO SCREEN (UPGRADED)
+local introFrame = Instance.new("Frame", gui)
+introFrame.Size = UDim2.new(0, 360, 0, 320)
+introFrame.Position = UDim2.new(0.5, -180, 0.5, -160)
+introFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+introFrame.BorderSizePixel = 0
+Instance.new("UICorner", introFrame).CornerRadius = UDim.new(0, 20)
+
+local introStroke = Instance.new("UIStroke", introFrame)
+introStroke.Thickness = 4
+introStroke.Color = Color3.fromRGB(255, 204, 0)
+
+local introTitle = Instance.new("TextLabel", introFrame)
+introTitle.Size = UDim2.new(1, 0, 0, 60)
+introTitle.Text = "ASHUxANURAG On Top\nLadle Mwah 👑"
+introTitle.TextColor3 = Color3.new(1, 0.8, 0)
+introTitle.Font = Enum.Font.FredokaOne
+introTitle.TextSize = 24
+introTitle.BackgroundTransparency = 1
+
+-- Profile Glow Effect
+local glow = Instance.new("Frame", introFrame)
+glow.Size = UDim2.new(0, 110, 0, 110)
+glow.Position = UDim2.new(0.08, 0, 0.28, 0)
+glow.BackgroundColor3 = Color3.fromRGB(255, 204, 0)
+glow.BackgroundTransparency = 0.8
+Instance.new("UICorner", glow).CornerRadius = UDim.new(1, 0)
+
+local pfp = Instance.new("ImageLabel", introFrame)
+pfp.Size = UDim2.new(0, 100, 0, 100)
+pfp.Position = UDim2.new(0.1, 0, 0.3, 0)
+pfp.Image = "rbxthumb://type=AvatarHeadShot&id=3590936446&w=150&h=150"
+Instance.new("UICorner", pfp).CornerRadius = UDim.new(0, 15)
+
+local devName = Instance.new("TextLabel", introFrame)
+devName.Size = UDim2.new(0, 150, 0, 30)
+devName.Position = UDim2.new(0.45, 0, 0.35, 0)
+devName.Text = "anuragisbck,TXRDragon1"
+devName.TextColor3 = Color3.new(1, 1, 1)
+devName.Font = Enum.Font.FredokaOne
+devName.TextSize = 28
+devName.BackgroundTransparency = 1
+devName.TextXAlignment = Enum.TextXAlignment.Left
+
+local subLabel = Instance.new("TextLabel", introFrame)
+subLabel.Size = UDim2.new(0, 150, 0, 20)
+subLabel.Position = UDim2.new(0.45, 0, 0.45, 0)
+subLabel.Text = "OG MICKEY"
+subLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+subLabel.Font = Enum.Font.SourceSansBold
+subLabel.TextSize = 14
+subLabel.BackgroundTransparency = 1
+subLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Extra Detail: Status Info
+local infoBox = Instance.new("TextLabel", introFrame)
+infoBox.Size = UDim2.new(0.8, 0, 0, 40)
+infoBox.Position = UDim2.new(0.1, 0, 0.65, 0)
+infoBox.Text = "STATUS: ONLINE | VERSION: 4.0 | PREMIUM USER"
+infoBox.TextColor3 = Color3.fromRGB(0, 255, 127)
+infoBox.Font = Enum.Font.Code
+infoBox.TextSize = 12
+infoBox.BackgroundTransparency = 0.9
+infoBox.BackgroundColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", infoBox)
+
+local introStartBtn = Instance.new("TextButton", introFrame)
+introStartBtn.Size = UDim2.new(0, 160, 0, 45)
+introStartBtn.Position = UDim2.new(0.5, -80, 0.82, 0)
+introStartBtn.BackgroundColor3 = Color3.fromRGB(227, 24, 55)
+introStartBtn.Text = "LAUNCH KAR 🚀"
+introStartBtn.TextColor3 = Color3.new(1, 1, 1)
+introStartBtn.Font = Enum.Font.FredokaOne
+introStartBtn.TextSize = 16
+Instance.new("UICorner", introStartBtn)
+
+--// FONT HUB GUI
+local main = Instance.new("Frame", gui)
+main.Visible = false
+main.Size, main.Position = UDim2.new(0, 200, 0, 380), UDim2.new(0.1, 0, 0.25, 0)
+main.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+main.Draggable, main.Active = true, true
+Instance.new("UICorner", main)
+local hubStroke = Instance.new("UIStroke", main)
+hubStroke.Thickness, hubStroke.Color = 3, Color3.fromRGB(255, 204, 0)
+
+local title = Instance.new("TextLabel", main)
+title.Size, title.Text = UDim2.new(1, 0, 0, 40), "爪工匚Ｋモㄚ FONTS"
+title.TextColor3, title.Font, title.TextSize = Color3.new(1,1,1), Enum.Font.FredokaOne, 16
+title.BackgroundTransparency = 1
+
+local nameIn = Instance.new("TextBox", main)
+nameIn.Size, nameIn.Position = UDim2.new(0.85, 0, 0, 30), UDim2.new(0.075, 0, 0.15, 0)
+nameIn.Text = "ASHUxANURAG KA ADMI HU YAWRRR"
+nameIn.BackgroundColor3, nameIn.TextColor3 = Color3.fromRGB(30,30,30), Color3.new(1,1,1)
+Instance.new("UICorner", nameIn)
+
+local huBtn = Instance.new("TextButton", main)
+huBtn.Size, huBtn.Position = UDim2.new(0.85, 0, 0, 30), UDim2.new(0.075, 0, 0.26, 0)
+huBtn.Text = "HU YAAR: OFF"
+huBtn.BackgroundColor3, huBtn.TextColor3 = Color3.fromRGB(45,45,45), Color3.new(1,1,1)
+Instance.new("UICorner", huBtn)
+
+local speedIn = Instance.new("TextBox", main)
+speedIn.Size, speedIn.Position = UDim2.new(0.85, 0, 0, 30), UDim2.new(0.075, 0, 0.37, 0)
+speedIn.Text = "0.1"
+speedIn.BackgroundColor3, speedIn.TextColor3 = Color3.fromRGB(30,30,30), Color3.new(1,1,1)
+Instance.new("UICorner", speedIn)
+
+local rgbBtn = Instance.new("TextButton", main)
+rgbBtn.Size, rgbBtn.Position = UDim2.new(0.85, 0, 0, 30), UDim2.new(0.075, 0, 0.48, 0)
+rgbBtn.Text = "RGB: OFF"
+rgbBtn.BackgroundColor3, rgbBtn.TextColor3 = Color3.fromRGB(45,45,45), Color3.new(1,1,1)
+Instance.new("UICorner", rgbBtn)
+
+local cycleStartBtn = Instance.new("TextButton", main)
+cycleStartBtn.Size, cycleStartBtn.Position = UDim2.new(0.4, 0, 0, 35), UDim2.new(0.075, 0, 0.62, 0)
+cycleStartBtn.Text, cycleStartBtn.BackgroundColor3 = "START", Color3.fromRGB(0, 180, 0)
+Instance.new("UICorner", cycleStartBtn)
+
+local stopBtn = Instance.new("TextButton", main)
+stopBtn.Size, stopBtn.Position = UDim2.new(0.4, 0, 0, 35), UDim2.new(0.525, 0, 0.62, 0)
+stopBtn.Text, stopBtn.BackgroundColor3 = "STOP", Color3.fromRGB(30, 30, 30)
+stopBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", stopBtn)
+
+local creditLabel = Instance.new("TextLabel", main)
+creditLabel.Size, creditLabel.Position = UDim2.new(1, 0, 0, 50), UDim2.new(0, 0, 0.82, 0)
+creditLabel.Text = "Dev by Mickey\nThank for using Mickey font"
+creditLabel.TextColor3, creditLabel.Font, creditLabel.TextSize = Color3.fromRGB(255, 204, 0), Enum.Font.SourceSansBold, 13
+creditLabel.BackgroundTransparency = 1
+
+--// TOGGLE MOUSE
+local toggle = Instance.new("TextButton", gui)
+toggle.Visible = false
+toggle.Size, toggle.Position = UDim2.new(0, 45, 0, 45), UDim2.new(0, 10, 0.5, 0)
+toggle.BackgroundColor3, toggle.Text = Color3.fromRGB(227, 24, 55), "🐭"
+toggle.Draggable, toggle.Active = true, true
+Instance.new("UICorner", toggle).CornerRadius = UDim.new(1, 0)
+
+--// LOGIC
+introStartBtn.MouseButton1Click:Connect(function()
+    introFrame:Destroy()
+    main.Visible = true
+    toggle.Visible = true
+end)
+
+toggle.MouseButton1Click:Connect(function() 
+    Visible = not Visible 
+    main.Visible = Visible 
+end)
+
+huBtn.MouseButton1Click:Connect(function() 
+    HuYaarActive = not HuYaarActive 
+    huBtn.Text = HuYaarActive and "HU YAAR: ON" or "HU YAAR: OFF" 
+end)
+
+rgbBtn.MouseButton1Click:Connect(function() 
+    RGBActive = not RGBActive 
+    rgbBtn.Text = RGBActive and "RGB: ON" or "RGB: OFF" 
+end)
+
+cycleStartBtn.MouseButton1Click:Connect(function() 
+    Cycling = true 
+    if SideRemote then
+        SideRemote:FireServer("RolePlayDescription", RizzLines[math.random(1, #RizzLines)])
+    end
+end)
+
+stopBtn.MouseButton1Click:Connect(function() 
+    Cycling = false 
+end)
+
+--// LOOPS
+task.spawn(function()
+    while true do
+        if Cycling and NameRemote then
+            FontIdx = (FontIdx % #FONTS) + 1
+            local base = (nameIn.Text ~= "" and nameIn.Text) or plr.DisplayName
+            if HuYaarActive and not base:find("HU YAAR") then base = base .. " HU YAAR" end
+            NameRemote:FireServer("RolePlayName", FONTS[FontIdx].F(base))
+        end
+        task.wait(tonumber(speedIn.Text) or 0.1)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if Cycling and SideRemote then
+            task.wait(60)
+            SideRemote:FireServer("RolePlayDescription", RizzLines[math.random(1, #RizzLines)])
+        else
+            task.wait(1)
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if RGBActive and ColorRemote then
+            local c = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+            ColorRemote:FireServer("PickingRPNameColor", c)
+            hubStroke.Color = c
+            if introFrame and introStroke then 
+                introStroke.Color = c 
+                glow.BackgroundColor3 = c
+            end
+        end
+        task.wait(0.1)
+    end
+end)
