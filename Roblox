@@ -2069,10 +2069,10 @@ UI.openBtnContainer:GetPropertyChangedSignal("Visible"):Connect(function()
 end)
 
 -- =========================================================
--- 👥 ONLINE ACTIVE ROSTER
+-- 👥 ONLINE ACTIVE ROSTER (STRICT SAME-SERVER SCRIPT USERS ONLY)
 -- =========================================================
 UI.rosterFrame = mk("Frame", UI.mainFrame, { Size = UDim2.new(0, 152, 1, -50), Position = UDim2.new(1, 10, 0, 46), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.08, Visible = false, ZIndex = 40, Corner = UDim.new(0, 12), Stroke = { Color = Colors.PrimaryDark, Thickness = 1.2, Transparency = 0.40 } })
-mk("TextLabel", UI.rosterFrame, { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, Text = sc("ONLINE PLAYERS"), TextColor3 = Colors.Primary, Font = Enum.Font.GothamBlack, TextSize = 9.8, ZIndex = 41 })
+mk("TextLabel", UI.rosterFrame, { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, Text = sc("SERVER SCRIPT USERS"), TextColor3 = Colors.Primary, Font = Enum.Font.GothamBlack, TextSize = 9.0, ZIndex = 41 })
 UI.rosterScroll = mk("ScrollingFrame", UI.rosterFrame, { Size = UDim2.new(1, -10, 1, -30), Position = UDim2.fromOffset(5, 26), BackgroundTransparency = 1, ScrollBarThickness = 2, CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 41 })
 mk("UIListLayout", UI.rosterScroll, { Padding = UDim.new(0, 4) })
 
@@ -2080,17 +2080,25 @@ local function refreshRosterUI()
     for _, c in ipairs(UI.rosterScroll:GetChildren()) do
         if c:IsA("GuiObject") and c.Name ~= "UIListLayout" then c:Destroy() end
     end
+    local now = os.time()
     for u, info in pairs(S.activeUsersTable) do
-        local dName = (type(info) == "table" and info.disp) or u
         local rawU = (type(info) == "table" and info.user) or u
-        local isMuted = (S.mutedUsers[u] == true)
-        local uBtn = mk("TextButton", UI.rosterScroll, { Size = UDim2.new(1, 0, 0, 26), BackgroundColor3 = Colors.Background, BackgroundTransparency = 0.44, Text = "      " .. dName .. (isMuted and (" [" .. sc("MUTED") .. "]") or ""), TextColor3 = isMuted and Colors.Danger or Colors.Text, Font = Enum.Font.GothamBold, TextSize = 10, TextTruncate = Enum.TextTruncate.AtEnd, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 42, Corner = UDim.new(0, 6), Stroke = { Color = Colors.SurfaceHover, Thickness = 1 } })
-        mk("Frame", uBtn, { Size = UDim2.fromOffset(6, 6), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 8, 0.5, 0), BackgroundColor3 = isMuted and Colors.Danger or Colors.OnlineGreen, ZIndex = 43, Corner = UDim.new(1, 0) })
-        applySpringHover(uBtn)
-        uBtn.MouseButton1Click:Connect(function()
-            UI.rosterFrame.Visible = false
-            if S.openProfile then S.openProfile(rawU, dName, S.userIdCache[rawU:lower()], isVerifiedOwner(rawU:lower()), rawU:lower() == "system") end
-        end)
+        local dName = (type(info) == "table" and info.disp) or u
+        local t = (type(info) == "table" and info.time) or 0
+        -- ✅ Sirf wahi script user dikhega jo abhi bhi isi server mein hai
+        local stillInServer = (u == lp.Name:lower()) or (Svc.Players:FindFirstChild(rawU) ~= nil)
+        if stillInServer and (now - t < 180) then
+            local isMuted = (S.mutedUsers[u] == true)
+            local uBtn = mk("TextButton", UI.rosterScroll, { Size = UDim2.new(1, 0, 0, 26), BackgroundColor3 = Colors.Background, BackgroundTransparency = 0.44, Text = "      " .. dName .. (isMuted and (" [" .. sc("MUTED") .. "]") or ""), TextColor3 = isMuted and Colors.Danger or Colors.Text, Font = Enum.Font.GothamBold, TextSize = 10, TextTruncate = Enum.TextTruncate.AtEnd, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 42, Corner = UDim.new(0, 6), Stroke = { Color = Colors.SurfaceHover, Thickness = 1 } })
+            mk("Frame", uBtn, { Size = UDim2.fromOffset(6, 6), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 8, 0.5, 0), BackgroundColor3 = isMuted and Colors.Danger or Colors.OnlineGreen, ZIndex = 43, Corner = UDim.new(1, 0) })
+            applySpringHover(uBtn)
+            uBtn.MouseButton1Click:Connect(function()
+                UI.rosterFrame.Visible = false
+                if S.openProfile then S.openProfile(rawU, dName, S.userIdCache[rawU:lower()], isVerifiedOwner(rawU:lower()), rawU:lower() == "system") end
+            end)
+        else
+            S.activeUsersTable[u] = nil
+        end
     end
 end
 
@@ -5162,20 +5170,48 @@ do
 end
 
 -- =========================================================
--- 💬 MESSAGE PIPELINE (ZERO AUTO-DELETE + SERVER & GLOBAL JOIN NOTICES)
+-- 💬 MESSAGE PIPELINE (STRICT SAME-SERVER SCRIPT USERS + ZERO AUTO-DELETE)
 -- =========================================================
-local function updateLiveCounter(username, dispName)
+local function updateLiveCounter(username, dispName, packetJobId)
     local lowU = username:lower()
+    if lowU == "system" then return end
+
+    -- ✅ Sirf SAME SERVER (game.JobId) ke TXR script users hi ACTIVE roster mein aayenge
+    if packetJobId and tostring(packetJobId) ~= "" and tostring(packetJobId) ~= tostring(game.JobId) then
+        return
+    end
+    local stillInServer = (lowU == lp.Name:lower()) or (Svc.Players:FindFirstChild(username) ~= nil)
+    if not stillInServer then
+        return
+    end
+
     S.activeUsersTable[lowU] = { time = os.time(), disp = dispName or username, user = username }
     S.knownUsers[lowU] = username
     if dispName then S.knownDispNames[lowU] = dispName end
+
     local count, now = 0, os.time()
     for u, data in pairs(S.activeUsersTable) do
         local t = (type(data) == "table" and data.time) or data
-        if now - t < 300 then count = count + 1 else S.activeUsersTable[u] = nil end
+        local rawU = (type(data) == "table" and data.user) or u
+        local inSrv = (u == lp.Name:lower()) or (Svc.Players:FindFirstChild(rawU) ~= nil)
+        if inSrv and (now - t < 180) then
+            count = count + 1
+        else
+            S.activeUsersTable[u] = nil
+        end
     end
     UI.liveText.Text = string.format("%d %s", math.max(1, count), sc("ACTIVE"))
 end
+
+-- ✅ Jab koi script user server leave kare toh turant ACTIVE list se hat jaaye
+Svc.Players.PlayerRemoving:Connect(function(plr)
+    if _G.TXR_ChatInstanceID ~= currentExecutionID or not UI.gui.Parent then return end
+    local lowU = plr.Name:lower()
+    if S.activeUsersTable[lowU] then
+        S.activeUsersTable[lowU] = nil
+        updateLiveCounter(lp.Name, lp.DisplayName, game.JobId)
+    end
+end)
 
 local function addJoinNotice(dispName, scopeType, customText)
     local targetScope = scopeType or "global"
@@ -5192,14 +5228,6 @@ local function addJoinNotice(dispName, scopeType, customText)
     })
     crispText(lbl, 0.6)
 end
-
--- ✅ SERVER TAB: Koi bhi player Roblox server mein aaye toh turant Server Chat mein join notice dikhega
-Svc.Players.PlayerAdded:Connect(function(plr)
-    if _G.TXR_ChatInstanceID ~= currentExecutionID or not UI.gui.Parent then return end
-    updateLiveCounter(plr.Name, plr.DisplayName)
-    addJoinNotice(plr.DisplayName, "server", sc("joined the server"))
-    playSFX("default")
-end)
 
 local function closeReactionMenu()
     if S.activeReactionMenu then S.activeReactionMenu:Destroy(); S.activeReactionMenu = nil end
@@ -7063,7 +7091,7 @@ task.spawn(function()
 end)
 
 -- =========================================================
--- 📥 ZERO-FILTER RAW CHAT ENGINE (NO DROPS, NO AUTO-DELETE, FULL JOIN NOTICES)
+-- 📥 ZERO-FILTER RAW CHAT ENGINE (STRICT SAME-SERVER ROSTER + FIXED TYPING & JOIN)
 -- =========================================================
 local GLOBAL_PROFILES_DB_FILE = "TXR_GlobalProfiles_DB_V1.json"
 
@@ -7221,7 +7249,11 @@ task.spawn(function()
                             local rawUsernameOnly = rawU or m.user
                             local rawDispOnly = rawD or rawUsernameOnly
                             local actorLow = rawUsernameOnly:lower()
-                            updateLiveCounter(rawUsernameOnly, rawDispOnly)
+                            local packetJob = tostring(m.jobId or "")
+
+                            if not wasInitial then
+                                updateLiveCounter(rawUsernameOnly, rawDispOnly, packetJob)
+                            end
 
                             local muteTgt, muteSt, muteSenderUid = m.msg:match("^__MUTE_SET__:([^|]+)|([01])|?(.*)$")
                             if muteTgt and verifySenderOwnership(actorLow, muteSenderUid) then
@@ -7318,21 +7350,30 @@ task.spawn(function()
                                 continue
                             end
 
+                            -- ✅ FIXED TYPING: Sirf fresh live packets (not wasInitial) aur ek hi baar process honge
                             if m.msg == "__TYPING__" then
-                                if not wasInitial and actorLow ~= lp.Name:lower() then
-                                    S.remoteTypers[rawDispOnly] = tick() + 3.6
+                                local typKey = "TYP_" .. tostring(idx) .. "_" .. actorLow .. "_" .. tostring(mTime)
+                                if not wasInitial and not RenderedCardKeys[typKey] then
+                                    RenderedCardKeys[typKey] = true
+                                    if actorLow ~= lp.Name:lower() and packetJob == tostring(game.JobId) then
+                                        S.remoteTypers[rawDispOnly] = tick() + 3.2
+                                    end
                                 end
                                 continue
                             end
 
-                            -- ✅ GLOBAL TAB: Jo bhi TXR network mein join karega uska Global Join msg aayega
+                            -- ✅ SIRF TXR SCRIPT USERS KA JOIN MESSAGE (Same Server -> SERVER tab | Other Server -> GLOBAL tab)
                             if m.msg == "Joined" or m.msg == "__REQ_SYNC__" then
                                 if not wasInitial then
                                     local joinKey = "JOIN_" .. tostring(idx) .. "_" .. actorLow .. "_" .. tostring(mTime)
                                     if not RenderedCardKeys[joinKey] then
                                         RenderedCardKeys[joinKey] = true
                                         if m.msg == "Joined" then
-                                            addJoinNotice(rawDispOnly, "global", sc("joined the network"))
+                                            if packetJob == tostring(game.JobId) then
+                                                addJoinNotice(rawDispOnly, "server", sc("joined the server"))
+                                            else
+                                                addJoinNotice(rawDispOnly, "global", sc("joined the network"))
+                                            end
                                             playSFX("default")
                                         end
                                         if rawUsernameOnly ~= lp.Name then
@@ -7369,6 +7410,7 @@ task.spawn(function()
 
                             if srvJob then
                                 scope, effectiveMsg = "server", cleanSrvMsg
+                                if tostring(srvJob) ~= tostring(game.JobId) then continue end
                             elseif cleanGlbMsg then
                                 scope, effectiveMsg = "global", cleanGlbMsg
                             end
