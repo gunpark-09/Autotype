@@ -1998,12 +1998,12 @@ local function triggerGlobalDynamicIslandBroadcast(styleKey, msgText)
 end
 
 -- =========================================================
--- 🛸 REOPEN ORB ENGINE + DYNAMIC ISLAND PREVIEW PILL
+-- 🛸 REOPEN ORB ENGINE + DYNAMIC ISLAND PREVIEW PILL (MOBILE TAP FIXED)
 -- =========================================================
 UI.openBtnContainer = mk("Frame", UI.gui, { Size = UDim2.fromOffset(86, 86), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.08, 0.5), BackgroundTransparency = 1, Visible = false, Active = true, ZIndex = 100 })
 UI.coreGlow = mk("ImageLabel", UI.openBtnContainer, { Size = UDim2.fromScale(1.8, 1.8), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, Image = "rbxassetid://10470601783", ImageColor3 = Colors.Primary, ImageTransparency = 0.6, ZIndex = 98, Corner = UDim.new(1, 0) })
 UI.eventGlow = mk("ImageLabel", UI.openBtnContainer, { Size = UDim2.fromScale(1.2, 1.2), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, Image = "rbxassetid://10470601783", ImageColor3 = Colors.Purple, ImageTransparency = 0.4, ZIndex = 98, Corner = UDim.new(1, 0) })
-UI.openBtn = mk("TextButton", UI.openBtnContainer, { Size = UDim2.fromScale(0.85, 0.85), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.18, Text = "", AutoButtonColor = false, ZIndex = 101, Corner = UDim.new(1, 0) })
+UI.openBtn = mk("TextButton", UI.openBtnContainer, { Size = UDim2.fromScale(0.85, 0.85), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.18, Text = "", AutoButtonColor = false, Active = true, ZIndex = 120, Corner = UDim.new(1, 0) })
 UI.gimbalOuter = mk("Frame", UI.openBtnContainer, { Size = UDim2.fromScale(1.05, 1.05), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1, ZIndex = 99, Corner = UDim.new(1, 0) })
 UI.goStroke = mk("UIStroke", UI.gimbalOuter, { Thickness = 2.5, Color = Color3.new(1,1,1), ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
 UI.goGrad = mk("UIGradient", UI.goStroke, { Color = ColorSequence.new({ csk(0, Colors.Primary), csk(0.25, Colors.Background), csk(0.5, Colors.Purple), csk(0.75, Colors.Background), csk(1, Colors.Primary) }) })
@@ -2022,8 +2022,8 @@ UI.centerCore = mk("Frame", UI.openBtn, { Size = UDim2.fromOffset(10, 10), Posit
 UI.coreStroke = mk("UIStroke", UI.centerCore, { Thickness = 2, Color = Color3.new(1,1,1), ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
 for i = 1, 12 do table.insert(UI.orbs, mk("Frame", UI.openBtn, { Size = UDim2.fromOffset(5, 5), BackgroundColor3 = Colors.Primary, ZIndex = 105, Corner = UDim.new(1, 0) })) end
 
-UI.unreadBadge = mk("Frame", UI.openBtnContainer, { Size = UDim2.fromOffset(22, 22), Position = UDim2.new(1, -6, 0, -6), BackgroundColor3 = Colors.Danger, Visible = false, ZIndex = 115, Corner = UDim.new(1, 0), Stroke = { Color = Color3.new(1, 1, 1), Thickness = 1.5 } })
-UI.unreadTxt = mk("TextLabel", UI.unreadBadge, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 10, Text = "0", ZIndex = 116 })
+UI.unreadBadge = mk("Frame", UI.openBtnContainer, { Size = UDim2.fromOffset(22, 22), Position = UDim2.new(1, -6, 0, -6), BackgroundColor3 = Colors.Danger, Visible = false, ZIndex = 125, Corner = UDim.new(1, 0), Stroke = { Color = Color3.new(1, 1, 1), Thickness = 1.5 } })
+UI.unreadTxt = mk("TextLabel", UI.unreadBadge, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 10, Text = "0", ZIndex = 126 })
 
 UI.orbToastPill = mk("Frame", UI.openBtnContainer, {
     Size = UDim2.fromOffset(0, 34), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(1, 8, 0.5, 0),
@@ -2064,10 +2064,6 @@ local function spawnSonar(pulseColor)
 end
 
 UI.openBtnScale = mk("UIScale", UI.openBtn)
-UI.openPulseScale = Svc.Tween:Create(UI.openBtnScale, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {Scale = 1.05})
-UI.openBtnContainer:GetPropertyChangedSignal("Visible"):Connect(function()
-    if UI.openBtnContainer.Visible then UI.openPulseScale:Play() else UI.openPulseScale:Cancel(); UI.openBtnScale.Scale = 1 end
-end)
 
 -- =========================================================
 -- 👥 ONLINE ACTIVE ROSTER (STRICT SAME-SERVER SCRIPT USERS ONLY)
@@ -2419,8 +2415,9 @@ createHeaderBtn("-", function()
     Svc.Tween:Create(UI.shadow, tInfo2, {ImageTransparency = 1}):Play()
     task.wait(0.35)
     UI.mainFrame.Visible = false; UI.aura.Visible = false; UI.shadow.Visible = false
+    S.dragThresholdMet = false
     UI.openBtnContainer.Visible = true; UI.openBtnScale.Scale = 0
-    Svc.Tween:Create(UI.openBtnScale, TweenInfo.new(0.6, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
+    Svc.Tween:Create(UI.openBtnScale, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
 end, 26)
 
 UI.closeBtn = createHeaderBtn("X", function()
@@ -3165,7 +3162,6 @@ do
         bStudioStrokeGrad = bStudioStrokeGrad
     }
 end
-
 -- =========================================================
 -- 🔇 OWNER-ONLY GLOBAL MUTE / UNMUTE CONTROL ENGINE
 -- =========================================================
@@ -4642,7 +4638,7 @@ do
                     end
 
                     mk("TextLabel", profileTapZone, { Size = UDim2.new(1, -46, 0, 16), Position = UDim2.fromOffset(45, 6), BackgroundTransparency = 1, Text = disp, TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 10.5, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 334 })
-                    mk("TextLabel", profileTapZone, { Size = UDim2.new(1, -46, 0, 14), Position = UDim2.fromOffset(45, 22), BackgroundTransparency = 1, Text = isRowAI and "@TXR_SystemCore" or ("@" .. rawUser), TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 9.2, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 334 })
+                    mk("TextLabel", profileTapZone, { Size = UDim2.new(1, -46, 0, 14), Position = UDim2.fromOffset(45, 22), BackgroundTransparency = 1, Text = isRowAI and "@TXR_SystemCore" or ("@" .. rawUser), TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 9.2, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextXAlignment.AtEnd, ZIndex = 334 })
 
                     profileTapZone.MouseButton1Click:Connect(function()
                         pSocialListDrawer.Visible = false
@@ -6475,7 +6471,7 @@ do
 end
 
 -- =========================================================
--- 🚀 DRAG ENGINE
+-- 🚀 DRAG ENGINE (MOBILE TAP-SAFE THRESHOLD)
 -- =========================================================
 local function makeDraggable(frame, handlesList, ghostAura, isOrb)
     local dragging, activeDragInput, dragStart, startPos, dragLoop = false, nil, nil, nil, nil
@@ -6537,7 +6533,13 @@ local function makeDraggable(frame, handlesList, ghostAura, isOrb)
     Svc.UIS.InputChanged:Connect(function(input)
         if dragging and (input == activeDragInput or input.UserInputType == Enum.UserInputType.MouseMovement) then
             local delta = input.Position - dragStart
-            if isOrb and delta.Magnitude > 8 then S.dragThresholdMet = true end
+            if isOrb then
+                if delta.Magnitude > 18 then
+                    S.dragThresholdMet = true
+                else
+                    return
+                end
+            end
             targetPos = getClampedTarget(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
             local currentMousePos = Vector2.new(input.Position.X, input.Position.Y)
             velocity, lastInputPos = currentMousePos - lastInputPos, currentMousePos
@@ -6548,21 +6550,28 @@ end
 makeDraggable(UI.mainFrame, {UI.header, UI.mainFrame, UI.channelFrame}, UI.aura, false)
 makeDraggable(UI.openBtnContainer, {UI.openBtn}, nil, true)
 
-UI.openBtn.MouseButton1Down:Connect(function() Svc.Tween:Create(UI.openBtnScale, TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Scale = 0.85}):Play() end)
-UI.openBtn.MouseButton1Up:Connect(function() Svc.Tween:Create(UI.openBtnScale, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out, 0, false, 0.2), {Scale = 1.05}):Play() end)
+UI.openBtn.MouseButton1Down:Connect(function()
+    Svc.Tween:Create(UI.openBtnScale, TweenInfo.new(0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {Scale = 0.88}):Play()
+end)
+UI.openBtn.MouseButton1Up:Connect(function()
+    Svc.Tween:Create(UI.openBtnScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+end)
 
-UI.openBtn.MouseButton1Click:Connect(function()
-    if S.dragThresholdMet then S.dragThresholdMet = false; return end
+local function reopenMainChatFromOrb()
+    if S.dragThresholdMet then
+        S.dragThresholdMet = false
+        return
+    end
     S.ghostDebounce = true; task.delay(0.5, function() S.ghostDebounce = false end)
     UI.orbToastPill.Visible = false
-    Svc.Tween:Create(UI.openBtnScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
-    task.wait(0.25)
+    Svc.Tween:Create(UI.openBtnScale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
+    task.wait(0.22)
     UI.openBtnContainer.Visible = false; UI.mainFrame.Visible = true; UI.aura.Visible = true; UI.shadow.Visible = true
     UI.mainScale.Scale, UI.auraScale.Scale, UI.shadowScale.Scale = 0.8, 0.8, 0.8
     S.unreadCount = 0; UI.unreadBadge.Visible = false
     scrollToFeedBottom()
-    local tInfo2 = TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-    local tInfo3 = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+    local tInfo2 = TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    local tInfo3 = TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
     Svc.Tween:Create(UI.mainScale, tInfo2, {Scale = 1}):Play()
     Svc.Tween:Create(UI.auraScale, tInfo2, {Scale = 1}):Play()
     Svc.Tween:Create(UI.shadowScale, tInfo2, {Scale = 1}):Play()
@@ -6570,13 +6579,16 @@ UI.openBtn.MouseButton1Click:Connect(function()
     Svc.Tween:Create(UI.aura, tInfo3, {ImageTransparency = S.isGhostMode and 0.90 or 0.68}):Play()
     Svc.Tween:Create(UI.shadow, tInfo3, {ImageTransparency = S.isGhostMode and 0.55 or 0.24}):Play()
     task.delay(0.15, scrollToFeedBottom)
-end)
+end
+
+UI.openBtn.Activated:Connect(reopenMainChatFromOrb)
 
 Svc.UIS.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.RightShift then
         if UI.mainFrame.Visible then
             UI.mainFrame.Visible = false; UI.aura.Visible = false; UI.shadow.Visible = false
+            S.dragThresholdMet = false
             UI.openBtnContainer.Visible = true; UI.openBtnScale.Scale = 1
         else
             UI.openBtnContainer.Visible = false; UI.mainFrame.Visible = true; UI.aura.Visible = true; UI.shadow.Visible = true
@@ -7402,7 +7414,17 @@ task.spawn(function()
     end
 end)
 
--- Handshake + Broadcast Initial Saved Profile Theme/Bio/Mood/CustomMedia/Followers Globally
+-- =========================================================
+-- 🚀 INSTANT UI BOOT + ASYNC NETWORK HANDSHAKE (ZERO DELAY)
+-- =========================================================
+S.recentJoinNoticeCooldown[lp.Name:lower()] = tick()
+addJoinNotice(lp.DisplayName, "server", sc("joined the server"))
+addMessageToFeed("System::" .. BRAND_TITLE, BRAND_TITLE .. " V39.6 online! Developer Studio, EMP Clan Hub, Glassy UI & Live Dynamic Island Broadcast active.", nil, false, game.JobId, "server")
+if #_G.TXR_GlobalHistoryCache == 0 then
+    addMessageToFeed("System::" .. BRAND_TITLE, "Global Network Synchronized! Permanent chat storage online.", nil, false, game.JobId, "global")
+end
+scrollToFeedBottom()
+
 task.spawn(function()
     if S.req then
         pcall(function()
@@ -7420,13 +7442,6 @@ task.spawn(function()
     end
     broadcastMyProfileStyle()
     saveGlobalProfilesDB()
-    S.recentJoinNoticeCooldown[lp.Name:lower()] = tick()
-    addJoinNotice(lp.DisplayName, "server", sc("joined the server"))
-    addMessageToFeed("System::" .. BRAND_TITLE, BRAND_TITLE .. " V39.6 online! Developer Studio, EMP Clan Hub, Glassy UI & Live Dynamic Island Broadcast active.", nil, false, game.JobId, "server")
-    if #_G.TXR_GlobalHistoryCache == 0 then
-        addMessageToFeed("System::" .. BRAND_TITLE, "Global Network Synchronized! Permanent chat storage online.", nil, false, game.JobId, "global")
-    end
-    scrollToFeedBottom()
 
     while _G.TXR_IsPolling and (_G.TXR_ChatInstanceID == currentExecutionID) do
         task.wait(25)
