@@ -550,6 +550,7 @@ local S = {
     recentLocalSentMap = {},
     cardReactionHooks = {},
     seenBroadcastIds = {},
+    recentJoinNoticeCooldown = {},
     activeDynamicIslandGui = nil,
     webMemeCache = {},
     activeDownloads = 0,
@@ -5214,12 +5215,13 @@ Svc.Players.PlayerRemoving:Connect(function(plr)
 end)
 
 local function addJoinNotice(dispName, scopeType, customText)
-    local targetScope = scopeType or "global"
+    local targetScope = scopeType or "server"
+    if targetScope ~= "server" then return end
     local pill = mk("Frame", UI.messageFeed, { Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1, ZIndex = 9 })
     pill:SetAttribute("ChatScope", targetScope)
     pill:SetAttribute("JobId", game.JobId)
     pill.Visible = (S.chatMode == targetScope)
-    local noticeLabel = customText or (targetScope == "server" and sc("joined the server") or sc("joined the network"))
+    local noticeLabel = customText or sc("joined the server")
     local lbl = mk("TextLabel", pill, {
         Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
         Font = Enum.Font.GothamMedium, TextSize = 10, TextColor3 = Colors.SubText, RichText = true,
@@ -7093,68 +7095,6 @@ end)
 -- =========================================================
 -- 📥 ZERO-FILTER RAW CHAT ENGINE (STRICT SAME-SERVER ROSTER + FIXED TYPING & JOIN)
 -- =========================================================
-local GLOBAL_PROFILES_DB_FILE = "TXR_GlobalProfiles_DB_V1.json"
-
-local function saveGlobalProfilesDB()
-    pcall(function()
-        local exportProfiles = {}
-        for uLow, prof in pairs(S.userProfiles) do
-            if type(prof) == "table" and uLow ~= "system" then
-                exportProfiles[uLow] = {
-                    bio = prof.bio or "",
-                    mood = prof.mood or "",
-                    themeIdx = prof.themeIdx or 1,
-                    customAv = prof.customAv or "",
-                    customBan = prof.customBan or "",
-                    badge = S.userCustomBadges[uLow] or "NONE",
-                    followers = getFollowerCountForUser(uLow),
-                    uid = S.userIdCache[uLow],
-                    disp = S.knownDispNames[uLow],
-                    user = S.knownUsers[uLow]
-                }
-            end
-        end
-        S.writeF(GLOBAL_PROFILES_DB_FILE, Svc.Http:JSONEncode(exportProfiles))
-    end)
-end
-
-pcall(function()
-    if S.isF(GLOBAL_PROFILES_DB_FILE) then
-        local rawDb = S.readF(GLOBAL_PROFILES_DB_FILE)
-        local decDb = rawDb and Svc.Http:JSONDecode(rawDb)
-        if type(decDb) == "table" then
-            for uLow, pData in pairs(decDb) do
-                if type(pData) == "table" then
-                    if uLow ~= lp.Name:lower() then
-                        S.userProfiles[uLow] = {
-                            bio = pData.bio or "TXR ReChat Network Member.",
-                            mood = pData.mood or ("⚡ " .. sc("ACTIVE")),
-                            themeIdx = pData.themeIdx or 1,
-                            customAv = pData.customAv or "",
-                            customBan = pData.customBan or ""
-                        }
-                        if pData.badge then S.userCustomBadges[uLow] = pData.badge end
-                        if pData.followers and pData.followers > 0 then
-                            S.socialGraph.knownCountCache[uLow] = pData.followers
-                            S.visualFollowerDisplay[uLow] = pData.followers
-                            ensureRealFollowersPopulated(uLow, pData.followers)
-                        end
-                    end
-                    if pData.uid then S.userIdCache[uLow] = pData.uid end
-                    if pData.user then S.knownUsers[uLow] = pData.user end
-                    if pData.disp then
-                        if Svc.Players:FindFirstChild(pData.user or uLow) then
-                            S.knownDispNames[uLow] = pData.disp
-                        else
-                            S.knownDispNames[uLow] = cleanPureAlphabetName(pData.disp, pData.user or uLow)
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-
 for _, item in ipairs(_G.TXR_GlobalHistoryCache) do
     if item.user and item.msg and not isInternalAlienPacket(item.msg) then
         local k = item.key or (tostring(item.user) .. "_" .. tostring(item.t) .. "_" .. tostring(item.msg))
@@ -7350,7 +7290,6 @@ task.spawn(function()
                                 continue
                             end
 
-                            -- ✅ FIXED TYPING: Sirf fresh live packets (not wasInitial) aur ek hi baar process honge
                             if m.msg == "__TYPING__" then
                                 local typKey = "TYP_" .. tostring(idx) .. "_" .. actorLow .. "_" .. tostring(mTime)
                                 if not wasInitial and not RenderedCardKeys[typKey] then
@@ -7362,19 +7301,18 @@ task.spawn(function()
                                 continue
                             end
 
-                            -- ✅ SIRF TXR SCRIPT USERS KA JOIN MESSAGE (Same Server -> SERVER tab | Other Server -> GLOBAL tab)
                             if m.msg == "Joined" or m.msg == "__REQ_SYNC__" then
                                 if not wasInitial then
                                     local joinKey = "JOIN_" .. tostring(idx) .. "_" .. actorLow .. "_" .. tostring(mTime)
                                     if not RenderedCardKeys[joinKey] then
                                         RenderedCardKeys[joinKey] = true
-                                        if m.msg == "Joined" then
-                                            if packetJob == tostring(game.JobId) then
+                                        if m.msg == "Joined" and packetJob == tostring(game.JobId) then
+                                            local lastNotice = S.recentJoinNoticeCooldown[actorLow] or 0
+                                            if tick() - lastNotice > 15 then
+                                                S.recentJoinNoticeCooldown[actorLow] = tick()
                                                 addJoinNotice(rawDispOnly, "server", sc("joined the server"))
-                                            else
-                                                addJoinNotice(rawDispOnly, "global", sc("joined the network"))
+                                                playSFX("default")
                                             end
-                                            playSFX("default")
                                         end
                                         if rawUsernameOnly ~= lp.Name then
                                             task.delay(math.random(1, 8) * 0.1, function()
@@ -7388,7 +7326,6 @@ task.spawn(function()
 
                             if m.hidden then continue end
 
-                            -- ✅ ZERO-FILTER RENDER: Har chat message 100% dikhega, kabhi gayab nahi hoga
                             local uniqueMsgKey = (m.id and tostring(m.id)) or (tostring(idx) .. "_" .. tostring(mTime) .. "_" .. tostring(m.user) .. "_" .. tostring(m.msg))
                             if RenderedCardKeys[uniqueMsgKey] then continue end
                             RenderedCardKeys[uniqueMsgKey] = true
@@ -7483,8 +7420,8 @@ task.spawn(function()
     end
     broadcastMyProfileStyle()
     saveGlobalProfilesDB()
+    S.recentJoinNoticeCooldown[lp.Name:lower()] = tick()
     addJoinNotice(lp.DisplayName, "server", sc("joined the server"))
-    addJoinNotice(lp.DisplayName, "global", sc("joined the network"))
     addMessageToFeed("System::" .. BRAND_TITLE, BRAND_TITLE .. " V39.6 online! Developer Studio, EMP Clan Hub, Glassy UI & Live Dynamic Island Broadcast active.", nil, false, game.JobId, "server")
     if #_G.TXR_GlobalHistoryCache == 0 then
         addMessageToFeed("System::" .. BRAND_TITLE, "Global Network Synchronized! Permanent chat storage online.", nil, false, game.JobId, "global")
