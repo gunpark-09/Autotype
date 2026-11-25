@@ -6069,7 +6069,7 @@ do
     emojiCloseBtn.MouseButton1Click:Connect(function() UI.emojiFrame.Visible = false; S.emojiTargetMode = "chat" end)
 
     local emojiScroll = mk("ScrollingFrame", UI.emojiFrame, { Size = UDim2.new(1, -12, 1, -60), Position = UDim2.fromOffset(6, 26), BackgroundTransparency = 1, ScrollBarThickness = 2, ScrollBarImageColor3 = Colors.Primary, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 261 })
-    mk("UIGridLayout", emojiScroll, { CellSize = UDim2.new(0, 32, 0, 32), CellPadding = UDim2.new(0, 4, 0, 4) })
+    mk("UIGridLayout", emojiScroll, { CellSize = UDim2.new(0, 32, 0, 32), CellPadding = UDim.new(0, 4, 0, 4) })
 
     local emojiTabBar = mk("Frame", UI.emojiFrame, { Size = UDim2.new(1, -12, 0, 28), Position = UDim2.new(0, 6, 1, -31), BackgroundColor3 = Colors.Background, BackgroundTransparency = 0.30, ZIndex = 261, Corner = UDim.new(0, 8) })
     mk("UIListLayout", emojiTabBar, { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 4) })
@@ -7197,7 +7197,7 @@ task.spawn(function()
 
                             local muteTgt, muteSt, muteSenderUid = m.msg:match("^__MUTE_SET__:([^|]+)|([01])|?(.*)$")
                             if muteTgt and verifySenderOwnership(actorLow, muteSenderUid) then
-                                local sysKey = "SYS_" .. tostring(idx) .. "_" .. tostring(mTime) .. "_" .. m.msg
+                                local sysKey = "SYS_" .. actorLow .. "_" .. m.msg .. "_" .. tostring(mTime)
                                 if not RenderedCardKeys[sysKey] then
                                     RenderedCardKeys[sysKey] = true
                                     local isNowMuted = (muteSt == "1")
@@ -7291,7 +7291,7 @@ task.spawn(function()
                             end
 
                             if m.msg == "__TYPING__" then
-                                local typKey = "TYP_" .. tostring(idx) .. "_" .. actorLow .. "_" .. tostring(mTime)
+                                local typKey = "TYP_" .. actorLow .. "_" .. m.msg .. "_" .. tostring(mTime)
                                 if not wasInitial and not RenderedCardKeys[typKey] then
                                     RenderedCardKeys[typKey] = true
                                     if actorLow ~= lp.Name:lower() and packetJob == tostring(game.JobId) then
@@ -7301,20 +7301,20 @@ task.spawn(function()
                                 continue
                             end
 
-                            if m.msg == "Joined" or m.msg == "__REQ_SYNC__" then
+                            if m.msg == "Joined" or m.msg:sub(1, 7) == "Joined:" or m.msg == "__REQ_SYNC__" then
                                 if not wasInitial then
-                                    local joinKey = "JOIN_" .. tostring(idx) .. "_" .. actorLow .. "_" .. tostring(mTime)
+                                    local joinKey = "JOIN_" .. actorLow .. "_" .. m.msg .. "_" .. tostring(mTime)
                                     if not RenderedCardKeys[joinKey] then
                                         RenderedCardKeys[joinKey] = true
-                                        if m.msg == "Joined" and packetJob == tostring(game.JobId) then
-                                            local lastNotice = S.recentJoinNoticeCooldown[actorLow] or 0
-                                            if tick() - lastNotice > 15 then
-                                                S.recentJoinNoticeCooldown[actorLow] = tick()
-                                                addJoinNotice(rawDispOnly, "server", sc("joined the server"))
-                                                playSFX("default")
+                                        if actorLow ~= lp.Name:lower() then
+                                            if (m.msg == "Joined" or m.msg:sub(1, 7) == "Joined:") and packetJob == tostring(game.JobId) then
+                                                local lastNotice = S.recentJoinNoticeCooldown[actorLow] or 0
+                                                if tick() - lastNotice > 15 then
+                                                    S.recentJoinNoticeCooldown[actorLow] = tick()
+                                                    addJoinNotice(rawDispOnly, "server", sc("joined the server"))
+                                                    playSFX("default")
+                                                end
                                             end
-                                        end
-                                        if rawUsernameOnly ~= lp.Name then
                                             task.delay(math.random(1, 8) * 0.1, function()
                                                 broadcastMyProfileStyle()
                                             end)
@@ -7326,7 +7326,7 @@ task.spawn(function()
 
                             if m.hidden then continue end
 
-                            local uniqueMsgKey = (m.id and tostring(m.id)) or (tostring(idx) .. "_" .. tostring(mTime) .. "_" .. tostring(m.user) .. "_" .. tostring(m.msg))
+                            local uniqueMsgKey = (m.id and tostring(m.id)) or (tostring(mTime) .. "_" .. tostring(m.user) .. "_" .. tostring(m.msg))
                             if RenderedCardKeys[uniqueMsgKey] then continue end
                             RenderedCardKeys[uniqueMsgKey] = true
 
@@ -7409,7 +7409,7 @@ task.spawn(function()
             S.req({
                 Url = S.SERVER_URL .. "/send", Method = "POST",
                 Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "Joined", jobId = game.JobId, hidden = false })
+                Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "Joined:" .. tostring(currentExecutionID), jobId = game.JobId, hidden = false })
             })
             S.req({
                 Url = S.SERVER_URL .. "/send", Method = "POST",
