@@ -1698,7 +1698,7 @@ local function saveGlobalMessageToDisk(userTag, cleanMsg, msgIdKey)
         if item.key == msgIdKey then return end
     end
     table.insert(_G.TXR_GlobalHistoryCache, { user = userTag, msg = cleanMsg, key = msgIdKey, t = os.date("%H:%M") })
-    while #_G.TXR_GlobalHistoryCache > 45 do table.remove(_G.TXR_GlobalHistoryCache, 1) end
+    while #_G.TXR_GlobalHistoryCache > 200 do table.remove(_G.TXR_GlobalHistoryCache, 1) end
     pcall(function() S.writeF(S.GLOBAL_SAVE_FILE, Svc.Http:JSONEncode(_G.TXR_GlobalHistoryCache)) end)
 end
 
@@ -2535,10 +2535,6 @@ local function filterFeedMode()
     for _, card in ipairs(UI.messageFeed:GetChildren()) do
         if card:IsA("GuiObject") and card.Name ~= "UIListLayout" and card.Name ~= "UIPadding" then
             local cardScope = card:GetAttribute("ChatScope")
-            local cardJob = tostring(card:GetAttribute("JobId") or "")
-            if cardScope == "server" and cardJob ~= "" and cardJob ~= S.CURRENT_SESSION_JOB then
-                card:Destroy(); continue
-            end
             card.Visible = (cardScope == S.chatMode)
         end
     end
@@ -5166,7 +5162,7 @@ do
 end
 
 -- =========================================================
--- 💬 MESSAGE PIPELINE (STRICT RANK TAGS + LIVE PFP SYNC + DELETE OWN GIF)
+-- 💬 MESSAGE PIPELINE (ZERO AUTO-DELETE + SERVER & GLOBAL JOIN NOTICES)
 -- =========================================================
 local function updateLiveCounter(username, dispName)
     local lowU = username:lower()
@@ -5181,13 +5177,29 @@ local function updateLiveCounter(username, dispName)
     UI.liveText.Text = string.format("%d %s", math.max(1, count), sc("ACTIVE"))
 end
 
-local function addJoinNotice(dispName)
+local function addJoinNotice(dispName, scopeType, customText)
+    local targetScope = scopeType or "global"
     local pill = mk("Frame", UI.messageFeed, { Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1, ZIndex = 9 })
-    pill:SetAttribute("ChatScope", "global"); pill:SetAttribute("JobId", game.JobId)
-    pill.Visible = (S.chatMode == "global")
-    local lbl = mk("TextLabel", pill, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Font = Enum.Font.GothamMedium, TextSize = 10, TextColor3 = Colors.SubText, RichText = true, Text = string.format("<font color='#2DEB87'><b>•</b></font> <i>%s %s</i>", sanitizeXml(dispName), sc("joined the network")), TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 10 })
+    pill:SetAttribute("ChatScope", targetScope)
+    pill:SetAttribute("JobId", game.JobId)
+    pill.Visible = (S.chatMode == targetScope)
+    local noticeLabel = customText or (targetScope == "server" and sc("joined the server") or sc("joined the network"))
+    local lbl = mk("TextLabel", pill, {
+        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+        Font = Enum.Font.GothamMedium, TextSize = 10, TextColor3 = Colors.SubText, RichText = true,
+        Text = string.format("<font color='#2DEB87'><b>•</b></font> <i>%s %s</i>", sanitizeXml(dispName), noticeLabel),
+        TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 10
+    })
     crispText(lbl, 0.6)
 end
+
+-- ✅ SERVER TAB: Koi bhi player Roblox server mein aaye toh turant Server Chat mein join notice dikhega
+Svc.Players.PlayerAdded:Connect(function(plr)
+    if _G.TXR_ChatInstanceID ~= currentExecutionID or not UI.gui.Parent then return end
+    updateLiveCounter(plr.Name, plr.DisplayName)
+    addJoinNotice(plr.DisplayName, "server", sc("joined the server"))
+    playSFX("default")
+end)
 
 local function closeReactionMenu()
     if S.activeReactionMenu then S.activeReactionMenu:Destroy(); S.activeReactionMenu = nil end
@@ -5224,7 +5236,6 @@ end
 local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSender, msgJobId, scopeType, customTimeStr, explicitMsgId)
     local effectiveScope = privateUserTarget and "dm" or (scopeType or "global")
     local effectiveJob = tostring(msgJobId or game.JobId)
-    if effectiveScope == "server" and effectiveJob ~= "" and effectiveJob ~= tostring(game.JobId) then return end
 
     local replyToName, replySnippet, cleanBodyMsg = msg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
     local displayMsg = cleanBodyMsg or msg
@@ -5273,16 +5284,6 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
     elseif rankTagKey then
         if userChosenTag ~= "NONE" then
             badgeProfile = BadgePresets[rankTagKey]
-        end
-    end
-
-    local scopeCount = 0
-    for _, child in ipairs(UI.messageFeed:GetChildren()) do
-        if child:IsA("Frame") and child:GetAttribute("ChatScope") == effectiveScope then scopeCount = scopeCount + 1 end
-    end
-    if scopeCount >= 45 then
-        for _, child in ipairs(UI.messageFeed:GetChildren()) do
-            if child:IsA("Frame") and child:GetAttribute("ChatScope") == effectiveScope then child:Destroy(); break end
         end
     end
 
@@ -6911,6 +6912,8 @@ end
 -- =========================================================
 -- 📡 SEND MESSAGE + OWNER MUTE/UNMUTE COMMANDS
 -- =========================================================
+local RenderedCardKeys = {}
+
 S.sendMessageFunc = function(overrideText)
     if isLocalPlayerMuted() then
         UI.chatInput.Text = ""
@@ -7005,7 +7008,7 @@ S.sendMessageFunc = function(overrideText)
 
     if not overrideText then UI.chatInput.Text = "" end
     local encodedUserTag = lp.Name .. "::" .. lp.DisplayName
-    local genMsgId = encodedUserTag .. "_" .. tostring(os.time()) .. "_" .. payloadBodyText
+    local genMsgId = encodedUserTag .. "_" .. tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999)) .. "_" .. payloadBodyText
 
     if S.privateTarget then
         addMessageToFeed(encodedUserTag, payloadBodyText, S.privateTarget, true, game.JobId, "dm", nil, genMsgId)
@@ -7021,9 +7024,8 @@ S.sendMessageFunc = function(overrideText)
         handleSmartAIQuery(text)
     end
 
-    S.recentLocalSentMap[string.lower(finalMsg)] = tick()
-    S.recentLocalSentMap[string.lower(payloadBodyText)] = tick()
-    S.recentLocalSentMap[string.lower(text)] = tick()
+    local localEchoSig = encodedUserTag .. "::" .. finalMsg
+    S.recentLocalSentMap[localEchoSig] = (S.recentLocalSentMap[localEchoSig] or 0) + 1
 
     task.spawn(function()
         if S.req then
@@ -7061,7 +7063,7 @@ task.spawn(function()
 end)
 
 -- =========================================================
--- 📥 HARDENED ANTI-SPOOF POLLING ENGINE + PERMANENT CROSS-ACCOUNT PFP/BANNER SYNC
+-- 📥 ZERO-FILTER RAW CHAT ENGINE (NO DROPS, NO AUTO-DELETE, FULL JOIN NOTICES)
 -- =========================================================
 local GLOBAL_PROFILES_DB_FILE = "TXR_GlobalProfiles_DB_V1.json"
 
@@ -7127,8 +7129,11 @@ end)
 
 for _, item in ipairs(_G.TXR_GlobalHistoryCache) do
     if item.user and item.msg and not isInternalAlienPacket(item.msg) then
-        if item.key then S.processedServerMessageMap[item.key] = true end
-        addMessageToFeed(item.user, item.msg, nil, false, game.JobId, "global", item.t, item.key)
+        local k = item.key or (tostring(item.user) .. "_" .. tostring(item.t) .. "_" .. tostring(item.msg))
+        if not RenderedCardKeys[k] then
+            RenderedCardKeys[k] = true
+            addMessageToFeed(item.user, item.msg, nil, false, game.JobId, "global", item.t, k)
+        end
     end
 end
 scrollToFeedBottom()
@@ -7184,13 +7189,11 @@ local function checkAndTriggerDynamicIslandPacket(msgStr, rawUserField, isReplay
 end
 
 task.spawn(function()
-    while _G.TXR_IsPolling and (_G.TXR_ChatInstanceID == currentExecutionID) and task.wait(0.4) do
-        if tostring(game.JobId) ~= S.CURRENT_SESSION_JOB then filterFeedMode() end
-
+    while _G.TXR_IsPolling and (_G.TXR_ChatInstanceID == currentExecutionID) and task.wait(0.35) do
         if S.req then
             local success, res = pcall(function()
                 return S.req({
-                    Url = S.SERVER_URL .. "/messages?since=" .. tostring(S.lastSyncTime),
+                    Url = S.SERVER_URL .. "/messages?since=0",
                     Method = "GET", Headers = { ["User-Agent"] = "Roblox/WinInet" }
                 })
             end)
@@ -7199,159 +7202,18 @@ task.spawn(function()
                 local decodeSuccess, data = pcall(function() return Svc.Http:JSONDecode(res.Body) end)
 
                 if decodeSuccess and type(data) == "table" then
-                    if S.isInitialSync then
-                        S.isInitialSync = false
-                        if #data > 0 then
-                            for i = 1, #data do
-                                local hm = data[i]
-                                if hm and hm.msg and hm.user and not isInternalAlienPacket(hm.msg) then
-                                    local rawU, rawD = hm.user:match("^(.-)::(.*)$")
-                                    local actorLow = (rawU or hm.user):lower()
+                    local wasInitial = S.isInitialSync
+                    S.isInitialSync = false
 
-                                    local muteTgt, muteSt, muteSenderUid = hm.msg:match("^__MUTE_SET__:([^|]+)|([01])|?(.*)$")
-                                    if muteTgt and verifySenderOwnership(actorLow, muteSenderUid) then
-                                        setGlobalMuteState(muteTgt, muteSt == "1", false)
-                                    end
+                    for idx, m in ipairs(data) do
+                        if m and m.msg and m.user then
+                            local mTime = tonumber(m.time) or 0
+                            if mTime > S.lastSyncTime then S.lastSyncTime = mTime end
 
-                                    local pThemeIdx, pMoodStr, pAvVal, pBanVal, pBioStr = hm.msg:match("^__PROF_STYLE__:(%d+)|([^|]*)|([^|]*)|([^|]*)|(.*)$")
-                                    if pThemeIdx then
-                                        S.userProfiles[actorLow] = {
-                                            themeIdx = tonumber(pThemeIdx) or 1,
-                                            mood = (pMoodStr ~= "" and pMoodStr) or ("⚡ " .. sc("ACTIVE")),
-                                            customAv = pAvVal or "",
-                                            customBan = pBanVal or "",
-                                            bio = (pBioStr ~= "" and pBioStr) or "TXR ReChat Network Member."
-                                        }
-                                        refreshUserAvatarsInFeed(actorLow)
-                                    end
-
-                                    local tagKeyStr, tagSenderUid = hm.msg:match("^__TAG_SET__:([^|]+)|?(.*)$")
-                                    if tagKeyStr then
-                                        if tagKeyStr == "NONE" or verifySenderOwnership(actorLow, tagSenderUid) or RankExclusiveTagKeys[getGlobalFollowerRankForUser(actorLow) or 0] == tagKeyStr then
-                                            S.userCustomBadges[actorLow] = tagKeyStr
-                                        end
-                                    end
-
-                                    local folCntStr, folUidStr = hm.msg:match("^__FOL_RANK__:(-?%d+)|(.*)$")
-                                    if folCntStr then
-                                        local cntNum = tonumber(folCntStr) or 0
-                                        local uidNum = tonumber(folUidStr)
-                                        if uidNum then
-                                            S.userIdCache[actorLow] = uidNum
-                                            if uidNum == S.MY_VIP_ID then verifySenderOwnership(actorLow, folUidStr) end
-                                        end
-                                        if actorLow ~= lp.Name:lower() or S.socialGraph.knownCountCache[actorLow] == nil then
-                                            S.socialGraph.knownCountCache[actorLow] = cntNum
-                                            S.visualFollowerDisplay[actorLow] = cntNum
-                                            ensureRealFollowersPopulated(actorLow, cntNum)
-                                        end
-                                    end
-
-                                    local setTgt, setValStr, setUidStr, setSenderUid = hm.msg:match("^__FOL_SET__:([^|]+)|(-?%d+)|([^|]*)|?(.*)$")
-                                    if setTgt and verifySenderOwnership(actorLow, setSenderUid) then
-                                        local tLow = setTgt:lower()
-                                        local nVal = tonumber(setValStr) or 0
-                                        local uVal = tonumber(setUidStr)
-                                        if uVal and uVal > 0 then S.userIdCache[tLow] = uVal end
-                                        S.socialGraph.knownCountCache[tLow] = nVal
-                                        S.visualFollowerDisplay[tLow] = nVal
-                                        ensureRealFollowersPopulated(tLow, nVal)
-                                    end
-
-                                    local syncTgt, syncTgtCnt, syncActCnt = hm.msg:match("^__FOL_SYNC__:([^|]+)|(-?%d+)|(-?%d+)$")
-                                    if syncTgt then
-                                        local tLow = syncTgt:lower()
-                                        local tC = tonumber(syncTgtCnt) or 0
-                                        local aC = tonumber(syncActCnt) or 0
-                                        if tLow ~= lp.Name:lower() or S.socialGraph.knownCountCache[tLow] == nil then
-                                            S.socialGraph.knownCountCache[tLow] = tC
-                                            S.visualFollowerDisplay[tLow] = tC
-                                            ensureRealFollowersPopulated(tLow, tC)
-                                        end
-                                        if actorLow ~= lp.Name:lower() or S.socialGraph.knownCountCache[actorLow] == nil then
-                                            S.socialGraph.knownCountCache[actorLow] = aC
-                                            S.visualFollowerDisplay[actorLow] = aC
-                                            ensureRealFollowersPopulated(actorLow, aC)
-                                        end
-                                    end
-
-                                    local fTarget, fState = hm.msg:match("^__FOLLOW__:([^|]+)|([01])$")
-                                    if fTarget then
-                                        applyFollowRelation(actorLow, fTarget:lower(), fState == "1")
-                                    end
-                                end
-                            end
-
-                            saveGlobalProfilesDB()
-
-                            local startIndex = math.max(1, #data - 45)
-                            for i = startIndex, #data do
-                                local m = data[i]
-                                if m.msg then
-                                    if checkAndTriggerDynamicIslandPacket(m.msg, m.user, true) then
-                                        continue
-                                    end
-                                    if not isInternalAlienPacket(m.msg) then
-                                        local rawU, rawD = m.user:match("^(.-)::(.*)$")
-                                        updateLiveCounter(rawU or m.user, rawD or m.user)
-
-                                        if not m.hidden and m.msg ~= "Joined" and m.msg ~= "__REQ_SYNC__" and m.msg ~= "__TYPING__" and not m.msg:find("^__REACT__:") and not m.msg:find("^__LIKE__:") and not m.msg:find("^__PROF_STYLE__:") and not m.msg:find("^__TAG_SET__:") and not m.msg:find("^__FOL_RANK__:") and not m.msg:find("^__FOL_SET__:") and not m.msg:find("^__FOL_SYNC__:") and not m.msg:find("^__FOLLOW__:") and not m.msg:find("^__MUTE_SET__:") then
-                                            local initKey = (m.id and tostring(m.id)) or (m.user .. "_" .. tostring(m.time) .. "_" .. m.msg)
-                                            local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
-                                            if pSender and pTarget then
-                                                S.processedServerMessageMap[initKey] = true
-                                                if lp.Name == pSender then
-                                                    addMessageToFeed(m.user, pMsg, pTarget, true, m.jobId, "dm", nil, initKey)
-                                                elseif lp.Name == pTarget then
-                                                    addMessageToFeed(m.user, pMsg, pSender, false, m.jobId, "dm", nil, initKey)
-                                                end
-                                                continue
-                                            end
-
-                                            local srvJob, cleanSrvMsg = m.msg:match("^%[SRV:(.-)%]%s*(.*)$")
-                                            local cleanGlbMsg = m.msg:match("^%[GLB%]%s*(.*)$")
-
-                                            if srvJob then
-                                                S.processedServerMessageMap[initKey] = true
-                                            else
-                                                local parsedMsg = cleanGlbMsg or m.msg
-                                                if not S.processedServerMessageMap[initKey] then
-                                                    S.processedServerMessageMap[initKey] = true
-                                                    addMessageToFeed(m.user, parsedMsg, nil, false, m.jobId, "global", nil, initKey)
-                                                    saveGlobalMessageToDisk(m.user, parsedMsg, initKey)
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                            S.lastSyncTime = data[#data].time
-                            if S.refreshFollowersLeaderboard then S.refreshFollowersLeaderboard() end
-                            if S.refreshTagPermissions then S.refreshTagPermissions() end
-                            if S.refreshCurrentOpenProfile then S.refreshCurrentOpenProfile() end
-                            scrollToFeedBottom()
-                        end
-                        continue
-                    end
-
-                    for _, m in ipairs(data) do
-                        local uniqueMsgKey = (m.id and tostring(m.id)) or (m.user .. "_" .. tostring(m.time) .. "_" .. m.msg)
-                        if S.processedServerMessageMap[uniqueMsgKey] then continue end
-
-                        if m.time >= S.lastSyncTime then
-                            S.lastSyncTime = m.time
-                            if not m.msg then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
+                            if checkAndTriggerDynamicIslandPacket(m.msg, m.user, wasInitial) then
                                 continue
                             end
-
-                            if checkAndTriggerDynamicIslandPacket(m.msg, m.user, false) then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
-                                continue
-                            end
-
                             if isInternalAlienPacket(m.msg) then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
                                 continue
                             end
 
@@ -7363,18 +7225,20 @@ task.spawn(function()
 
                             local muteTgt, muteSt, muteSenderUid = m.msg:match("^__MUTE_SET__:([^|]+)|([01])|?(.*)$")
                             if muteTgt and verifySenderOwnership(actorLow, muteSenderUid) then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
-                                local isNowMuted = (muteSt == "1")
-                                setGlobalMuteState(muteTgt, isNowMuted, false)
-                                if muteTgt:lower() == lp.Name:lower() then
-                                    addMessageToFeed("System::" .. BRAND_TITLE, isNowMuted and "🔇 You have been MUTED by the Owner." or "🔊 You have been UNMUTED by the Owner.", nil, false, game.JobId, S.chatMode)
+                                local sysKey = "SYS_" .. tostring(idx) .. "_" .. tostring(mTime) .. "_" .. m.msg
+                                if not RenderedCardKeys[sysKey] then
+                                    RenderedCardKeys[sysKey] = true
+                                    local isNowMuted = (muteSt == "1")
+                                    setGlobalMuteState(muteTgt, isNowMuted, false)
+                                    if not wasInitial and muteTgt:lower() == lp.Name:lower() then
+                                        addMessageToFeed("System::" .. BRAND_TITLE, isNowMuted and "🔇 You have been MUTED by the Owner." or "🔊 You have been UNMUTED by the Owner.", nil, false, game.JobId, S.chatMode)
+                                    end
                                 end
                                 continue
                             end
 
                             local pThemeIdx, pMoodStr, pAvVal, pBanVal, pBioStr = m.msg:match("^__PROF_STYLE__:(%d+)|([^|]*)|([^|]*)|([^|]*)|(.*)$")
                             if pThemeIdx then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
                                 S.userProfiles[actorLow] = {
                                     themeIdx = tonumber(pThemeIdx) or 1,
                                     mood = (pMoodStr ~= "" and pMoodStr) or ("⚡ " .. sc("ACTIVE")),
@@ -7382,71 +7246,48 @@ task.spawn(function()
                                     customBan = pBanVal or "",
                                     bio = (pBioStr ~= "" and pBioStr) or "TXR ReChat Network Member."
                                 }
-                                saveGlobalProfilesDB()
                                 refreshUserAvatarsInFeed(actorLow)
-                                if S.refreshCurrentOpenProfile then S.refreshCurrentOpenProfile() end
-                                if S.refreshFollowersLeaderboard then S.refreshFollowersLeaderboard() end
                                 continue
                             end
 
                             local tagKeyStr, tagSenderUid = m.msg:match("^__TAG_SET__:([^|]+)|?(.*)$")
                             if tagKeyStr then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
                                 if tagKeyStr == "NONE" or verifySenderOwnership(actorLow, tagSenderUid) or RankExclusiveTagKeys[getGlobalFollowerRankForUser(actorLow) or 0] == tagKeyStr then
                                     S.userCustomBadges[actorLow] = tagKeyStr
-                                    saveGlobalProfilesDB()
                                 end
                                 continue
                             end
 
                             local folCntStr, folUidStr = m.msg:match("^__FOL_RANK__:(-?%d+)|(.*)$")
                             if folCntStr then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
                                 local cntNum = tonumber(folCntStr) or 0
                                 local uidNum = tonumber(folUidStr)
                                 if uidNum then
                                     S.userIdCache[actorLow] = uidNum
                                     if uidNum == S.MY_VIP_ID then verifySenderOwnership(actorLow, folUidStr) end
                                 end
-                                if actorLow ~= lp.Name:lower() then
-                                    local oldV = getFollowerCountForUser(actorLow)
-                                    S.socialGraph.knownCountCache[actorLow] = cntNum
-                                    ensureRealFollowersPopulated(actorLow, cntNum)
-                                    animateFollowerRollout(actorLow, oldV, cntNum)
-                                elseif S.socialGraph.knownCountCache[actorLow] == nil then
+                                if actorLow ~= lp.Name:lower() or S.socialGraph.knownCountCache[actorLow] == nil then
                                     S.socialGraph.knownCountCache[actorLow] = cntNum
                                     S.visualFollowerDisplay[actorLow] = cntNum
                                     ensureRealFollowersPopulated(actorLow, cntNum)
                                 end
-                                saveGlobalProfilesDB()
-                                if S.refreshFollowersLeaderboard then S.refreshFollowersLeaderboard() end
-                                if S.refreshProfileSocialUI then S.refreshProfileSocialUI() end
-                                if S.refreshTagPermissions then S.refreshTagPermissions() end
                                 continue
                             end
 
                             local setTgt, setValStr, setUidStr, setSenderUid = m.msg:match("^__FOL_SET__:([^|]+)|(-?%d+)|([^|]*)|?(.*)$")
                             if setTgt and verifySenderOwnership(actorLow, setSenderUid) then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
                                 local tLow = setTgt:lower()
-                                local oldVal = getFollowerCountForUser(tLow)
                                 local nVal = tonumber(setValStr) or 0
                                 local uVal = tonumber(setUidStr)
                                 if uVal and uVal > 0 then S.userIdCache[tLow] = uVal end
                                 S.socialGraph.knownCountCache[tLow] = nVal
+                                S.visualFollowerDisplay[tLow] = nVal
                                 ensureRealFollowersPopulated(tLow, nVal)
-                                animateFollowerRollout(tLow, oldVal, nVal)
-                                saveProfilePrefs()
-                                saveGlobalProfilesDB()
-                                if S.refreshFollowersLeaderboard then S.refreshFollowersLeaderboard() end
-                                if S.refreshProfileSocialUI then S.refreshProfileSocialUI() end
-                                if S.refreshTagPermissions then S.refreshTagPermissions() end
                                 continue
                             end
 
                             local syncTgt, syncTgtCnt, syncActCnt = m.msg:match("^__FOL_SYNC__:([^|]+)|(-?%d+)|(-?%d+)$")
                             if syncTgt then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
                                 local tLow = syncTgt:lower()
                                 local tC = tonumber(syncTgtCnt) or 0
                                 local aC = tonumber(syncActCnt) or 0
@@ -7460,83 +7301,74 @@ task.spawn(function()
                                     S.visualFollowerDisplay[actorLow] = aC
                                     ensureRealFollowersPopulated(actorLow, aC)
                                 end
-                                saveGlobalProfilesDB()
-                                if S.refreshFollowersLeaderboard then S.refreshFollowersLeaderboard() end
-                                if S.refreshProfileSocialUI then S.refreshProfileSocialUI() end
-                                if S.refreshTagPermissions then S.refreshTagPermissions() end
                                 continue
                             end
 
                             local fTarget, fState = m.msg:match("^__FOLLOW__:([^|]+)|([01])$")
                             if fTarget then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
                                 applyFollowRelation(actorLow, fTarget:lower(), fState == "1")
-                                if UI.profileModal and UI.profileModal.Visible and S.refreshProfileSocialUI then
-                                    S.refreshProfileSocialUI()
-                                end
                                 continue
                             end
 
-                            if m.msg:find("^__LIKE__:") then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
-                                continue
-                            end
+                            if m.msg:find("^__LIKE__:") then continue end
 
                             local rTargetId, rEmoji = m.msg:match("^__REACT__:([^|]+)|(.*)$")
                             if rTargetId and rEmoji then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
-                                if S.cardReactionHooks[rTargetId] then
-                                    S.cardReactionHooks[rTargetId](rEmoji)
-                                end
+                                if S.cardReactionHooks[rTargetId] then S.cardReactionHooks[rTargetId](rEmoji) end
                                 continue
                             end
 
                             if m.msg == "__TYPING__" then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
-                                if actorLow ~= lp.Name:lower() and not S.mutedUsers[actorLow] then S.remoteTypers[rawDispOnly] = tick() + 3.6 end
-                                continue
-                            end
-
-                            if m.msg == "Joined" or m.msg == "__REQ_SYNC__" then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
-                                if rawUsernameOnly ~= lp.Name then
-                                    if m.msg == "Joined" then
-                                        addJoinNotice(rawDispOnly)
-                                        playSFX("default")
-                                    end
-                                    task.delay(math.random(1, 8) * 0.1, function()
-                                        broadcastMyProfileStyle()
-                                    end)
+                                if not wasInitial and actorLow ~= lp.Name:lower() then
+                                    S.remoteTypers[rawDispOnly] = tick() + 3.6
                                 end
                                 continue
                             end
 
-                            if m.hidden then S.processedServerMessageMap[uniqueMsgKey] = true; continue end
+                            -- ✅ GLOBAL TAB: Jo bhi TXR network mein join karega uska Global Join msg aayega
+                            if m.msg == "Joined" or m.msg == "__REQ_SYNC__" then
+                                if not wasInitial then
+                                    local joinKey = "JOIN_" .. tostring(idx) .. "_" .. actorLow .. "_" .. tostring(mTime)
+                                    if not RenderedCardKeys[joinKey] then
+                                        RenderedCardKeys[joinKey] = true
+                                        if m.msg == "Joined" then
+                                            addJoinNotice(rawDispOnly, "global", sc("joined the network"))
+                                            playSFX("default")
+                                        end
+                                        if rawUsernameOnly ~= lp.Name then
+                                            task.delay(math.random(1, 8) * 0.1, function()
+                                                broadcastMyProfileStyle()
+                                            end)
+                                        end
+                                    end
+                                end
+                                continue
+                            end
+
+                            if m.hidden then continue end
+
+                            -- ✅ ZERO-FILTER RENDER: Har chat message 100% dikhega, kabhi gayab nahi hoga
+                            local uniqueMsgKey = (m.id and tostring(m.id)) or (tostring(idx) .. "_" .. tostring(mTime) .. "_" .. tostring(m.user) .. "_" .. tostring(m.msg))
+                            if RenderedCardKeys[uniqueMsgKey] then continue end
+                            RenderedCardKeys[uniqueMsgKey] = true
+
                             S.remoteTypers[rawDispOnly] = nil
 
-                            if not isVerifiedOwner(actorLow) and S.mutedUsers[actorLow] then
-                                S.processedServerMessageMap[uniqueMsgKey] = true
-                                continue
-                            end
-
                             if actorLow == lp.Name:lower() then
-                                local lowMsg, isEcho = string.lower(m.msg), false
-                                for sentText, sentTime in pairs(S.recentLocalSentMap) do
-                                    if (sentText == lowMsg or lowMsg:find(sentText, 1, true)) and (tick() - sentTime <= 60) then
-                                        isEcho = true; S.recentLocalSentMap[sentText] = nil; break
-                                    end
+                                local localEchoSig = tostring(m.user) .. "::" .. tostring(m.msg)
+                                local pendingCount = S.recentLocalSentMap[localEchoSig] or 0
+                                if pendingCount > 0 then
+                                    S.recentLocalSentMap[localEchoSig] = (pendingCount > 1) and (pendingCount - 1) or nil
+                                    continue
                                 end
-                                if isEcho then S.processedServerMessageMap[uniqueMsgKey] = true; continue end
                             end
 
-                            S.processedServerMessageMap[uniqueMsgKey] = true
                             local srvJob, cleanSrvMsg = m.msg:match("^%[SRV:(.-)%]%s*(.*)$")
                             local cleanGlbMsg = m.msg:match("^%[GLB%]%s*(.*)$")
                             local scope, effectiveMsg = "global", m.msg
 
                             if srvJob then
                                 scope, effectiveMsg = "server", cleanSrvMsg
-                                if tostring(srvJob) ~= tostring(game.JobId) then continue end
                             elseif cleanGlbMsg then
                                 scope, effectiveMsg = "global", cleanGlbMsg
                             end
@@ -7547,16 +7379,18 @@ task.spawn(function()
                                     addMessageToFeed(m.user, pMsg, pTarget, true, m.jobId, "dm", nil, uniqueMsgKey)
                                 elseif lp.Name == pTarget then
                                     addMessageToFeed(m.user, pMsg, pSender, false, m.jobId, "dm", nil, uniqueMsgKey)
-                                    local _, _, strippedBubble = pMsg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
-                                    displayBubble(rawUsernameOnly, strippedBubble or pMsg); playSFX("dm")
-                                    if S.chatMode ~= "dm" then
-                                        S.unreadDmCount += 1
-                                        UI.dmUnreadTxt.Text = tostring(S.unreadDmCount)
-                                        UI.dmUnreadPill.Visible = true
-                                    end
-                                    if not UI.mainFrame.Visible then
-                                        S.unreadCount = S.unreadCount + 1; UI.unreadTxt.Text = tostring(S.unreadCount); UI.unreadBadge.Visible = true
-                                        triggerOrbToast(sc("DM") .. " • " .. rawDispOnly, strippedBubble or pMsg)
+                                    if not wasInitial then
+                                        local _, _, strippedBubble = pMsg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
+                                        displayBubble(rawUsernameOnly, strippedBubble or pMsg); playSFX("dm")
+                                        if S.chatMode ~= "dm" then
+                                            S.unreadDmCount += 1
+                                            UI.dmUnreadTxt.Text = tostring(S.unreadDmCount)
+                                            UI.dmUnreadPill.Visible = true
+                                        end
+                                        if not UI.mainFrame.Visible then
+                                            S.unreadCount = S.unreadCount + 1; UI.unreadTxt.Text = tostring(S.unreadCount); UI.unreadBadge.Visible = true
+                                            triggerOrbToast(sc("DM") .. " • " .. rawDispOnly, strippedBubble or pMsg)
+                                        end
                                     end
                                 end
                                 continue
@@ -7565,7 +7399,7 @@ task.spawn(function()
                             addMessageToFeed(m.user, effectiveMsg, nil, false, m.jobId, scope, nil, uniqueMsgKey)
                             if scope == "global" then saveGlobalMessageToDisk(m.user, effectiveMsg, uniqueMsgKey) end
 
-                            if rawUsernameOnly ~= lp.Name then
+                            if not wasInitial and rawUsernameOnly ~= lp.Name then
                                 local _, _, strippedBubble = effectiveMsg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
                                 displayBubble(rawUsernameOnly, strippedBubble or effectiveMsg); playSFX("default")
                                 if not UI.mainFrame.Visible then
@@ -7574,6 +7408,14 @@ task.spawn(function()
                                 end
                             end
                         end
+                    end
+
+                    if wasInitial then
+                        saveGlobalProfilesDB()
+                        if S.refreshFollowersLeaderboard then S.refreshFollowersLeaderboard() end
+                        if S.refreshTagPermissions then S.refreshTagPermissions() end
+                        if S.refreshCurrentOpenProfile then S.refreshCurrentOpenProfile() end
+                        scrollToFeedBottom()
                     end
                 end
             end
@@ -7599,6 +7441,8 @@ task.spawn(function()
     end
     broadcastMyProfileStyle()
     saveGlobalProfilesDB()
+    addJoinNotice(lp.DisplayName, "server", sc("joined the server"))
+    addJoinNotice(lp.DisplayName, "global", sc("joined the network"))
     addMessageToFeed("System::" .. BRAND_TITLE, BRAND_TITLE .. " V39.6 online! Developer Studio, EMP Clan Hub, Glassy UI & Live Dynamic Island Broadcast active.", nil, false, game.JobId, "server")
     if #_G.TXR_GlobalHistoryCache == 0 then
         addMessageToFeed("System::" .. BRAND_TITLE, "Global Network Synchronized! Permanent chat storage online.", nil, false, game.JobId, "global")
