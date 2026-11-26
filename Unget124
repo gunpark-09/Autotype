@@ -6567,7 +6567,6 @@ end
 local inputContainer = mk("Frame", UI.mainFrame, { Size = UDim2.new(1, -24, 0, 46), Position = UDim2.new(0, 12, 1, -54), BackgroundColor3 = rgb(13, 18, 29), BackgroundTransparency = 0.13, ZIndex = 12, Corner = UDim.new(1, 0) })
 UI.inputContainer = inputContainer
 mk("UIGradient", inputContainer, { Color = ColorSequence.new({ csk(0, rgb(255, 255, 255)), csk(1, rgb(195, 208, 230)) }), Rotation = 90 })
-Sequence.new({ csk(0, rgb(255, 255, 255)), csk(1, rgb(195, 208, 230)) }), Rotation = 90 })
 local inputStroke = mk("UIStroke", inputContainer, { Thickness = 1.25, Color = rgb(255, 255, 255), Transparency = 0.42, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
 UI.inputFocusGrad = mk("UIGradient", inputStroke, { Color = ColorSequence.new({ csk(0, Colors.Primary), csk(0.5, Colors.Purple), csk(1, Colors.Primary) }) })
 
