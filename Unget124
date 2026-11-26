@@ -3294,6 +3294,7 @@ do
         playSFX("default")
     end)
 end
+
 -- =========================================================
 -- ✦ DEVELOPER TAB: DEVELOPER PROFILE, EMP CLAN DISCORD, GLOBAL ANNOUNCER & SCRIPT HUB
 -- =========================================================
@@ -3370,7 +3371,7 @@ do
                 copyDevIdBtn.TextColor3 = rgb(225, 238, 255)
             end
         end)
-    end)
+    })
 
     local devNameRow = mk("Frame", devCard, { Size = UDim2.new(1, -200, 0, 22), Position = UDim2.new(0, 86, 0, 12), BackgroundTransparency = 1, ZIndex = 16 })
     mk("UIListLayout", devNameRow, { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder })
@@ -5292,18 +5293,21 @@ do
     local pBioText = mk("TextLabel", pBioBox, { Size = UDim2.new(1, -16, 0, 40), Position = UDim2.fromOffset(9, 18), BackgroundTransparency = 1, Text = "", TextColor3 = Colors.Text, Font = Enum.Font.GothamMedium, TextSize = 9.8, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 307 })
     local pBioEditBox = mk("TextBox", pBioBox, { Size = UDim2.new(1, -16, 0, 40), Position = UDim2.fromOffset(9, 18), BackgroundTransparency = 1, Text = "", PlaceholderText = sc("Write your bio..."), PlaceholderColor3 = Colors.SubText, TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamMedium, TextSize = 9.8, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ClearTextOnFocus = false, Visible = false, ZIndex = 308 })
 
-    local pDock = mk("Frame", pCardBody, { Size = UDim2.new(1, -22, 0, 34), Position = UDim2.fromOffset(11, 172), BackgroundTransparency = 1, ZIndex = 306 })
-    local pFollowBtn = mk("TextButton", pDock, { Size = UDim2.new(0.42, -3, 1, 0), Position = UDim2.fromScale(0, 0), BackgroundColor3 = defaultPal.main, Text = "+ " .. sc("FOLLOW"), TextColor3 = rgb(10, 13, 20), Font = Enum.Font.GothamBlack, TextSize = 10.0, AutoButtonColor = false, ZIndex = 307, Corner = UDim.new(0, 8) })
-    local pDmBtn = mk("TextButton", pDock, { Size = UDim2.new(0.29, -3, 1, 0), Position = UDim2.new(0.42, 3, 0, 0), BackgroundColor3 = rgb(21, 26, 38), Text = sc("DM"), TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 9.8, AutoButtonColor = false, ZIndex = 307, Corner = UDim.new(0, 8), Stroke = { Color = rgb(40, 48, 66), Thickness = 1, Transparency = 0.35 } })
-    local pTpBtn = mk("TextButton", pDock, { Size = UDim2.new(0.29, 0, 1, 0), Position = UDim2.new(0.71, 3, 0, 0), BackgroundColor3 = rgb(21, 26, 38), Text = sc("TP"), TextColor3 = defaultPal.main, Font = Enum.Font.GothamBlack, TextSize = 9.8, AutoButtonColor = false, ZIndex = 307, Corner = UDim.new(0, 8), Stroke = { Color = rgb(40, 48, 66), Thickness = 1, Transparency = 0.35 } })
-    local pMuteBtn = mk("TextButton", pDock, { Size = UDim2.new(0.22, 0, 1, 0), Position = UDim2.new(0.78, 3, 0, 0), BackgroundColor3 = rgb(38, 16, 26), Text = sc("MUTE"), TextColor3 = Colors.Danger, Font = Enum.Font.GothamBlack, TextSize = 9.2, AutoButtonColor = false, Visible = false, ZIndex = 307, Corner = UDim.new(0, 8), Stroke = { Color = rgb(110, 36, 52), Thickness = 1, Transparency = 0.25 } })
+    -- ✅ Register-Safe Action Dock (Avoids >200 Local Registers in Single Chunk)
+    do
+        local pDock = mk("Frame", pCardBody, { Size = UDim2.new(1, -22, 0, 34), Position = UDim2.fromOffset(11, 172), BackgroundTransparency = 1, ZIndex = 306 })
+        UI.pFollowBtn = mk("TextButton", pDock, { Size = UDim2.new(0.42, -3, 1, 0), Position = UDim2.fromScale(0, 0), BackgroundColor3 = defaultPal.main, Text = "+ " .. sc("FOLLOW"), TextColor3 = rgb(10, 13, 20), Font = Enum.Font.GothamBlack, TextSize = 10.0, AutoButtonColor = false, ZIndex = 307, Corner = UDim.new(0, 8) })
+        UI.pDmBtn = mk("TextButton", pDock, { Size = UDim2.new(0.29, -3, 1, 0), Position = UDim2.new(0.42, 3, 0, 0), BackgroundColor3 = rgb(21, 26, 38), Text = sc("DM"), TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 9.8, AutoButtonColor = false, ZIndex = 307, Corner = UDim.new(0, 8), Stroke = { Color = rgb(40, 48, 66), Thickness = 1, Transparency = 0.35 } })
+        UI.pTpBtn = mk("TextButton", pDock, { Size = UDim2.new(0.29, 0, 1, 0), Position = UDim2.new(0.71, 3, 0, 0), BackgroundColor3 = rgb(21, 26, 38), Text = sc("TP"), TextColor3 = defaultPal.main, Font = Enum.Font.GothamBlack, TextSize = 9.8, AutoButtonColor = false, ZIndex = 307, Corner = UDim.new(0, 8), Stroke = { Color = rgb(40, 48, 66), Thickness = 1, Transparency = 0.35 } })
+        UI.pMuteBtn = mk("TextButton", pDock, { Size = UDim2.new(0.22, 0, 1, 0), Position = UDim2.new(0.78, 3, 0, 0), BackgroundColor3 = rgb(38, 16, 26), Text = sc("MUTE"), TextColor3 = Colors.Danger, Font = Enum.Font.GothamBlack, TextSize = 9.2, AutoButtonColor = false, Visible = false, ZIndex = 307, Corner = UDim.new(0, 8), Stroke = { Color = rgb(110, 36, 52), Thickness = 1, Transparency = 0.25 } })
 
-    local pSelfStudioBtn = mk("TextButton", pDock, { Size = UDim2.new(0.42, -3, 1, 0), Position = UDim2.fromScale(0, 0), BackgroundColor3 = rgb(21, 27, 40), Text = sc("PFP / BANNER"), TextColor3 = defaultPal.main, Font = Enum.Font.GothamBlack, TextSize = 9.5, AutoButtonColor = false, Visible = false, ZIndex = 308, Corner = UDim.new(0, 8), Stroke = { Color = defaultPal.dark, Thickness = 1, Transparency = 0.35 } })
-    local pSaveSelfBtn = mk("TextButton", pDock, { Size = UDim2.new(0.58, -3, 1, 0), Position = UDim2.new(0.42, 3, 0, 0), BackgroundColor3 = defaultPal.main, Text = sc("SAVE PROFILE"), TextColor3 = rgb(10, 13, 20), Font = Enum.Font.GothamBlack, TextSize = 10.2, AutoButtonColor = false, Visible = false, ZIndex = 308, Corner = UDim.new(0, 8) })
+        UI.pSelfStudioBtn = mk("TextButton", pDock, { Size = UDim2.new(0.42, -3, 1, 0), Position = UDim2.fromScale(0, 0), BackgroundColor3 = rgb(21, 27, 40), Text = sc("PFP / BANNER"), TextColor3 = defaultPal.main, Font = Enum.Font.GothamBlack, TextSize = 9.5, AutoButtonColor = false, Visible = false, ZIndex = 308, Corner = UDim.new(0, 8), Stroke = { Color = defaultPal.dark, Thickness = 1, Transparency = 0.35 } })
+        UI.pSaveSelfBtn = mk("TextButton", pDock, { Size = UDim2.new(0.58, -3, 1, 0), Position = UDim2.new(0.42, 3, 0, 0), BackgroundColor3 = defaultPal.main, Text = sc("SAVE PROFILE"), TextColor3 = rgb(10, 13, 20), Font = Enum.Font.GothamBlack, TextSize = 10.2, AutoButtonColor = false, Visible = false, ZIndex = 308, Corner = UDim.new(0, 8) })
 
-    pSelfStudioBtn.MouseButton1Click:Connect(function() openProfileMediaStudio("AVATAR") end)
+        UI.pSelfStudioBtn.MouseButton1Click:Connect(function() openProfileMediaStudio("AVATAR") end)
 
-    applySpringHover(pFollowBtn); applySpringHover(pDmBtn); applySpringHover(pTpBtn); applySpringHover(pMuteBtn); applySpringHover(pSelfStudioBtn); applySpringHover(pSaveSelfBtn)
+        applySpringHover(UI.pFollowBtn); applySpringHover(UI.pDmBtn); applySpringHover(UI.pTpBtn); applySpringHover(UI.pMuteBtn); applySpringHover(UI.pSelfStudioBtn); applySpringHover(UI.pSaveSelfBtn)
+    end
 
     local function renderProfilePalette(idx)
         local pal = ProfilePalettes[idx] or ProfilePalettes[1]
@@ -5338,10 +5342,10 @@ do
         sldScroll.ScrollBarImageColor3 = pal.main
 
         pBioHeader.TextColor3 = pal.main
-        pTpBtn.TextColor3 = pal.main
-        pSelfStudioBtn.TextColor3 = pal.main
-        pSelfStudioBtn:FindFirstChildOfClass("UIStroke").Color = pal.dark
-        pSaveSelfBtn.BackgroundColor3 = pal.main
+        UI.pTpBtn.TextColor3 = pal.main
+        UI.pSelfStudioBtn.TextColor3 = pal.main
+        UI.pSelfStudioBtn:FindFirstChildOfClass("UIStroke").Color = pal.dark
+        UI.pSaveSelfBtn.BackgroundColor3 = pal.main
 
         for sIdx, chk in pairs(swatchChecks) do
             chk.Visible = (sIdx == S.myProfileColorIdx)
@@ -5444,36 +5448,36 @@ do
 
         if not isMyOwn then
             local iFollow = S.socialGraph.myFollowed[lowU] == true
-            pFollowBtn.Text = iFollow and sc("FOLLOWING") or ("+ " .. sc("FOLLOW"))
-            pFollowBtn.BackgroundColor3 = iFollow and rgb(25, 31, 46) or pal.main
-            pFollowBtn.TextColor3 = iFollow and pal.main or rgb(10, 13, 20)
+            UI.pFollowBtn.Text = iFollow and sc("FOLLOWING") or ("+ " .. sc("FOLLOW"))
+            UI.pFollowBtn.BackgroundColor3 = iFollow and rgb(25, 31, 46) or pal.main
+            UI.pFollowBtn.TextColor3 = iFollow and pal.main or rgb(10, 13, 20)
 
             local canOwnerMute = isOwnerLocal and (not isAI) and (not isVerifiedOwner(lowU))
             if canOwnerMute then
                 local isTargetMuted = (S.mutedUsers[lowU] == true)
-                pFollowBtn.Size = UDim2.new(0.35, -3, 1, 0)
-                pDmBtn.Size = UDim2.new(0.22, -3, 1, 0)
-                pDmBtn.Position = UDim2.new(0.35, 3, 0, 0)
-                pTpBtn.Size = UDim2.new(0.21, -3, 1, 0)
-                pTpBtn.Position = UDim2.new(0.57, 3, 0, 0)
-                pMuteBtn.Visible = true
-                pMuteBtn.Text = isTargetMuted and sc("UNMUTE") or sc("MUTE")
-                pMuteBtn.BackgroundColor3 = isTargetMuted and rgb(16, 40, 28) or rgb(38, 16, 26)
-                pMuteBtn.TextColor3 = isTargetMuted and Colors.OnlineGreen or Colors.Danger
-                pMuteBtn:FindFirstChildOfClass("UIStroke").Color = isTargetMuted and Colors.OnlineGreen or rgb(110, 36, 52)
+                UI.pFollowBtn.Size = UDim2.new(0.35, -3, 1, 0)
+                UI.pDmBtn.Size = UDim2.new(0.22, -3, 1, 0)
+                UI.pDmBtn.Position = UDim2.new(0.35, 3, 0, 0)
+                UI.pTpBtn.Size = UDim2.new(0.21, -3, 1, 0)
+                UI.pTpBtn.Position = UDim2.new(0.57, 3, 0, 0)
+                UI.pMuteBtn.Visible = true
+                UI.pMuteBtn.Text = isTargetMuted and sc("UNMUTE") or sc("MUTE")
+                UI.pMuteBtn.BackgroundColor3 = isTargetMuted and rgb(16, 40, 28) or rgb(38, 16, 26)
+                UI.pMuteBtn.TextColor3 = isTargetMuted and Colors.OnlineGreen or Colors.Danger
+                UI.pMuteBtn:FindFirstChildOfClass("UIStroke").Color = isTargetMuted and Colors.OnlineGreen or rgb(110, 36, 52)
             else
-                pFollowBtn.Size = UDim2.new(0.42, -3, 1, 0)
-                pDmBtn.Size = UDim2.new(0.29, -3, 1, 0)
-                pDmBtn.Position = UDim2.new(0.42, 3, 0, 0)
-                pTpBtn.Size = UDim2.new(0.29, 0, 1, 0)
-                pTpBtn.Position = UDim2.new(0.71, 3, 0, 0)
-                pMuteBtn.Visible = false
+                UI.pFollowBtn.Size = UDim2.new(0.42, -3, 1, 0)
+                UI.pDmBtn.Size = UDim2.new(0.29, -3, 1, 0)
+                UI.pDmBtn.Position = UDim2.new(0.42, 3, 0, 0)
+                UI.pTpBtn.Size = UDim2.new(0.29, 0, 1, 0)
+                UI.pTpBtn.Position = UDim2.new(0.71, 3, 0, 0)
+                UI.pMuteBtn.Visible = false
             end
         end
     end
     S.refreshProfileSocialUI = refreshActiveProfileSocialUI
 
-    pMuteBtn.MouseButton1Click:Connect(function()
+    UI.pMuteBtn.MouseButton1Click:Connect(function()
         if not S.activeProfileUser then return end
         local lowU = S.activeProfileUser:lower()
         local nextMute = not (S.mutedUsers[lowU] == true)
@@ -5481,7 +5485,7 @@ do
         playSFX(nextMute and "default" or "reaction")
     end)
 
-    pFollowBtn.MouseButton1Click:Connect(function()
+    UI.pFollowBtn.MouseButton1Click:Connect(function()
         if not S.activeProfileUser then return end
         local targetLower = S.activeProfileUser:lower()
         if targetLower == lp.Name:lower() then return end
@@ -5557,7 +5561,7 @@ do
         end
     end)
 
-    pSaveSelfBtn.MouseButton1Click:Connect(function()
+    UI.pSaveSelfBtn.MouseButton1Click:Connect(function()
         local newBio = pBioEditBox.Text:gsub("^%s*(.-)%s*$", "%1")
         if newBio == "" then newBio = "TXR ReChat Network User." end
         if #newBio > 95 then newBio = string.sub(newBio, 1, 95) end
@@ -5566,10 +5570,10 @@ do
         saveProfilePrefs()
         broadcastMyProfileStyle()
 
-        pSaveSelfBtn.Text = sc("SAVED")
+        UI.pSaveSelfBtn.Text = sc("SAVED")
         playSFX("default")
         task.delay(0.65, function()
-            if pSaveSelfBtn and pSaveSelfBtn.Parent then pSaveSelfBtn.Text = sc("SAVE PROFILE") end
+            if UI.pSaveSelfBtn and UI.pSaveSelfBtn.Parent then UI.pSaveSelfBtn.Text = sc("SAVE PROFILE") end
             closeProfileModal()
         end)
     end)
@@ -5589,7 +5593,7 @@ do
         end)
     end)
 
-    pDmBtn.MouseButton1Click:Connect(function()
+    UI.pDmBtn.MouseButton1Click:Connect(function()
         if S.activeProfileUser then
             if S.activeProfileUser:lower() == "system" then
                 UI.chatInput.Text = "@ai "
@@ -5604,16 +5608,16 @@ do
         end
     end)
 
-    pTpBtn.MouseButton1Click:Connect(function()
+    UI.pTpBtn.MouseButton1Click:Connect(function()
         local targetPlr = S.activeProfileUser and findPlayerCI(S.activeProfileUser)
         if targetPlr and targetPlr.Character and targetPlr.Character:FindFirstChild("HumanoidRootPart") and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
             lp.Character.HumanoidRootPart.CFrame = targetPlr.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
-            pTpBtn.Text = sc("DONE")
+            UI.pTpBtn.Text = sc("DONE")
             playSFX("default")
-            task.delay(1.0, function() if pTpBtn and pTpBtn.Parent then pTpBtn.Text = sc("TP") end end)
+            task.delay(1.0, function() if UI.pTpBtn and UI.pTpBtn.Parent then UI.pTpBtn.Text = sc("TP") end end)
         else
-            pTpBtn.Text = sc("OFFLINE")
-            task.delay(1.0, function() if pTpBtn and pTpBtn.Parent then pTpBtn.Text = sc("TP") end end)
+            UI.pTpBtn.Text = sc("OFFLINE")
+            task.delay(1.0, function() if UI.pTpBtn and UI.pTpBtn.Parent then UI.pTpBtn.Text = sc("TP") end end)
         end
     end)
 
@@ -5735,18 +5739,18 @@ do
             pBioText.Visible = false
             pBioEditBox.Visible = true
             pBioEditBox.Text = S.myBio
-            pFollowBtn.Visible = false; pDmBtn.Visible = false; pTpBtn.Visible = false; pMuteBtn.Visible = false
-            pSelfStudioBtn.Visible = true
-            pSaveSelfBtn.Visible = true
+            UI.pFollowBtn.Visible = false; UI.pDmBtn.Visible = false; UI.pTpBtn.Visible = false; UI.pMuteBtn.Visible = false
+            UI.pSelfStudioBtn.Visible = true
+            UI.pSaveSelfBtn.Visible = true
         else
             pBioHeader.Text = sc("ABOUT ME")
             pBioEditBox.Visible = false
             pBioText.Visible = true
             pBioText.Text = isAI and "Live Multi-Model AI Assistant connected to Internet. Type '@ai <question>' in chat to ask anything!"
                 or ((profData and profData.bio) or "TXR ReChat Network Member.")
-            pSelfStudioBtn.Visible = false
-            pSaveSelfBtn.Visible = false
-            pFollowBtn.Visible = true; pDmBtn.Visible = true; pTpBtn.Visible = true
+            UI.pSelfStudioBtn.Visible = false
+            UI.pSaveSelfBtn.Visible = false
+            UI.pFollowBtn.Visible = true; UI.pDmBtn.Visible = true; UI.pTpBtn.Visible = true
         end
 
         UI.profileBackdrop.Visible = true
@@ -6563,6 +6567,7 @@ end
 local inputContainer = mk("Frame", UI.mainFrame, { Size = UDim2.new(1, -24, 0, 46), Position = UDim2.new(0, 12, 1, -54), BackgroundColor3 = rgb(13, 18, 29), BackgroundTransparency = 0.13, ZIndex = 12, Corner = UDim.new(1, 0) })
 UI.inputContainer = inputContainer
 mk("UIGradient", inputContainer, { Color = ColorSequence.new({ csk(0, rgb(255, 255, 255)), csk(1, rgb(195, 208, 230)) }), Rotation = 90 })
+Sequence.new({ csk(0, rgb(255, 255, 255)), csk(1, rgb(195, 208, 230)) }), Rotation = 90 })
 local inputStroke = mk("UIStroke", inputContainer, { Thickness = 1.25, Color = rgb(255, 255, 255), Transparency = 0.42, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
 UI.inputFocusGrad = mk("UIGradient", inputStroke, { Color = ColorSequence.new({ csk(0, Colors.Primary), csk(0.5, Colors.Purple), csk(1, Colors.Primary) }) })
 
@@ -6608,7 +6613,7 @@ local function broadcastTypingSignal()
         if S.req then
             pcall(function()
                 S.req({
-                    Url = S.SERVER_URL .. "/send", Method = "POST",Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Url = S.SERVER_URL .. "/send", Method = "POST", Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
                     Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "__TYPING__", jobId = game.JobId, hidden = true })
                 })
             end)
