@@ -369,11 +369,8 @@ local function generateProceduralRichAccount(serialIdx)
         richDisp = "i" .. baseFirst
     end
 
-    -- Guaranteed real high-value Roblox avatar thumbnail ID (Headless, Korblox, Valkyrie, Dominus, OG avatars)
     local realisticUid = VerifiedRichRobloxUserIds[(serialIdx % #VerifiedRichRobloxUserIds) + 1]
 
-    -- Realistic Anime/Cyber Media Mix:
-    -- 55% BOTH (Custom Anime PFP + Banner), 20% PFP_ONLY, 15% BANNER_ONLY, 10% NONE (Pure Expensive Roblox Avatar)
     local mediaBucket = (serialIdx * 17 + 5) % 20
     local customAvUrl = ""
     local customBanUrl = ""
@@ -2105,7 +2102,6 @@ local function refreshRosterUI()
         local rawU = (type(info) == "table" and info.user) or u
         local dName = (type(info) == "table" and info.disp) or u
         local t = (type(info) == "table" and info.time) or 0
-        -- ✅ Sirf wahi script user dikhega jo abhi bhi isi server mein hai
         local stillInServer = (u == lp.Name:lower()) or (findPlayerCI(rawU) ~= nil)
         if stillInServer and (now - t < 180) then
             local isMuted = (S.mutedUsers[u] == true)
@@ -5196,7 +5192,6 @@ local function updateLiveCounter(username, dispName, packetJobId)
     local lowU = username:lower()
     if lowU == "system" then return end
 
-    -- ✅ Sirf SAME SERVER (game.JobId) ke TXR script users hi ACTIVE roster mein aayenge
     if packetJobId and tostring(packetJobId) ~= "" and tostring(packetJobId) ~= tostring(game.JobId) then
         return
     end
@@ -5661,7 +5656,6 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
                         end
                     end
                     
-                    -- ✅ Unified Master Loop Reaction Hover Tracking (Zero extra RenderStepped leak)
                     S.activeReactionDragState = {
                         isHoldingFn = function() return isHoldingCard end,
                         renderedBtns = renderedBtns
@@ -6603,7 +6597,6 @@ task.spawn(function()
         sparkTimer = sparkTimer + dt
 
         if UI.mainFrame.Visible then
-            -- ✅ Unified Reaction Menu Hover Tracking (Zero Per-Card Loop Leak)
             if S.activeReactionMenu and S.activeReactionDragState then
                 local st = S.activeReactionDragState
                 if st.isHoldingFn and st.isHoldingFn() then
@@ -7130,7 +7123,6 @@ local SessionJoinShown = {
     [lp.Name:lower()] = true
 }
 
--- ✅ Merged Unified PlayerRemoving Handler
 Svc.Players.PlayerRemoving:Connect(function(plr)
     if _G.TXR_ChatInstanceID ~= currentExecutionID or not UI.gui.Parent then return end
     local lowU = plr.Name:lower()
@@ -7205,21 +7197,18 @@ end
 
 
 -- =========================================================
--- 🏷️ TXR TAG ENGINE V2 + PREMIUM PROFILE GLOW  (ADD-ON BLOCK)
--- PASTE THIS WHOLE BLOCK ONCE, RIGHT BEFORE THIS LINE OF YOUR SCRIPT:
---     task.spawn(function()
---         while _G.TXR_IsPolling and (_G.TXR_ChatInstanceID == currentExecutionID) and UI.gui and UI.gui.Parent do
--- (i.e. right AFTER the function checkAndTriggerDynamicIslandPacket ... end)
--- Nothing else in your script is edited or removed.
+-- 🏷️ TXR TAG ENGINE V2 + PREMIUM PROFILE GLOW + 20 60-FPS FLUID ANIMATED FRAMES (V9 INTEGRATED)
 -- =========================================================
 do
 local function TXR_TagEngineInit()
     local myLowName = lp.Name:lower()
     local ENGINE_FILE = "TXR_TagEngine_DB_V1_" .. tostring(lp.UserId) .. ".json"
     local GOLD = rgb(255, 215, 55)
+    local nsk = NumberSequenceKeypoint.new
 
     S.grantedTags = S.grantedTags or {}
     S.profileGlow = S.profileGlow or {}
+    S.profileFrame = S.profileFrame or {}
     S.activeFxList = S.activeFxList or {}
     S.__txModalTimers = {}
     S.__txEngineTimers = {}
@@ -7227,7 +7216,6 @@ local function TXR_TagEngineInit()
     local firstBatchSeen = false
     local origRankKey = getRankExclusiveTagKey
 
-    -- ---------- time helpers ----------
     local function nowSec()
         local ok, t = pcall(function() return workspace:GetServerTimeNow() end)
         if ok and type(t) == "number" then return math.floor(t) end
@@ -7249,11 +7237,10 @@ local function TXR_TagEngineInit()
         return "⏳ " .. fmtDur(exp - nowSec())
     end
     local function fmtStamp(exp)
-        if not exp or exp == 0 then return "never" end
+        if not exp or exp == 0 then return "Never" end
         return os.date("%d %b %H:%M", exp)
     end
 
-    -- ---------- new tag presets (girls + troll/male) ----------
     BadgePresets["POOKIE"]    = { Title = "🎀 " .. sc("POOKIE"), Speed = 1.1, Fx = "float", Colors = { csk(0, rgb(255,182,213)), csk(0.5, rgb(255,230,240)), csk(1, rgb(255,160,200)) } }
     BadgePresets["GIRLYPOP"]  = { Title = "💖 " .. sc("GIRLY POP"), Speed = 1.2, Fx = "pulse", Colors = { csk(0, rgb(255,105,180)), csk(0.5, rgb(195,145,255)), csk(1, rgb(255,105,180)) } }
     BadgePresets["DIVA"]      = { Title = "👑 " .. sc("DIVA"), Speed = 1.2, Fx = "heartbeat", Colors = { csk(0, rgb(255,60,170)), csk(0.35, rgb(255,208,95)), csk(0.7, rgb(200,80,255)), csk(1, rgb(255,60,170)) } }
@@ -7280,11 +7267,17 @@ local function TXR_TagEngineInit()
     for _, k in ipairs(TagTabs.TROLL) do table.insert(OwnerAllKeys, k) end
     for _, k in ipairs(TagTabs.SPECIAL) do if k ~= "OWNER" then table.insert(OwnerAllKeys, k) end end
 
-    -- ---------- 10 premium profile glow presets ----------
     local function buildSeq(cols)
         local pts, n = {}, #cols
         for i = 1, n do table.insert(pts, csk((i - 1) / n, cols[i])) end
         table.insert(pts, csk(1, cols[1]))
+        return ColorSequence.new(pts)
+    end
+    local function makeExactSeq(cols)
+        local pts = {}
+        for i, c in ipairs(cols) do
+            table.insert(pts, csk((i - 1) / math.max(1, #cols - 1), c))
+        end
         return ColorSequence.new(pts)
     end
     local function reverseSeq(cols)
@@ -7310,7 +7303,6 @@ local function TXR_TagEngineInit()
         gp.spark = gp.c[1]
     end
 
-    -- ---------- broadcast styles for notifications ----------
     BROADCAST_STYLES.TAGGIFT = {
         badge = sc("TAG GIFT") .. "  •  " .. sc("NEW"), pillTxt = "● TAG GIFT", accent = rgb(255,120,200),
         bgTintA = rgb(58,16,44), bgTintB = rgb(8,10,16),
@@ -7326,8 +7318,12 @@ local function TXR_TagEngineInit()
         bgTintA = rgb(36,18,64), bgTintB = rgb(8,10,16),
         colors = { csk(0, rgb(190,120,255)), csk(0.5, rgb(0,245,255)), csk(1, rgb(190,120,255)) }
     }
+    BROADCAST_STYLES.FRAMEGIFT = {
+        badge = sc("PROFILE FRAME") .. "  •  " .. sc("NEW"), pillTxt = "● PROFILE FRAME", accent = rgb(255,150,210),
+        bgTintA = rgb(56,18,48), bgTintB = rgb(8,10,16),
+        colors = { csk(0, rgb(255,130,200)), csk(0.5, rgb(120,220,255)), csk(1, rgb(255,130,200)) }
+    }
 
-    -- ---------- data helpers ----------
     local function isTagValid(low, key)
         local map = S.grantedTags[low]
         local rec = map and map[key]
@@ -7355,11 +7351,10 @@ local function TXR_TagEngineInit()
         return nil
     end
 
-    -- ---------- persistence ----------
     local function saveEngineDB()
         pcall(function()
             S.writeF(ENGINE_FILE, Svc.Http:JSONEncode({
-                granted = S.grantedTags, glow = S.profileGlow, pick = S.currentOwnerBadge
+                granted = S.grantedTags, glow = S.profileGlow, frame = S.profileFrame, pick = S.currentOwnerBadge
             }))
         end)
     end
@@ -7391,7 +7386,6 @@ local function TXR_TagEngineInit()
         end
     end
 
-    -- load saved engine data
     pcall(function()
         if S.isF(ENGINE_FILE) then
             local raw = S.readF(ENGINE_FILE)
@@ -7433,7 +7427,6 @@ local function TXR_TagEngineInit()
         if first and low ~= myLowName and not S.userCustomBadges[low] then S.userCustomBadges[low] = first end
     end
 
-    -- ---------- getRankExclusiveTagKey now also understands gifted tags ----------
     getRankExclusiveTagKey = function(userLower)
         if not userLower or userLower == "system" then return nil end
         local chosen = (userLower == myLowName) and S.currentOwnerBadge or S.userCustomBadges[userLower]
@@ -7445,7 +7438,6 @@ local function TXR_TagEngineInit()
         return nil
     end
 
-    -- ---------- unique badge effects ----------
     local origBuild = buildLiveBadgeElement
     local function attachFx(host, bData, zBase, tSz)
         local rec = { host = host, fx = bData.Fx, seed = math.random() * 10 }
@@ -7472,7 +7464,6 @@ local function TXR_TagEngineInit()
         return host
     end
 
-    -- ---------- notifications ----------
     local function notifyIsland(styleKey, text)
         pcall(function() triggerGlobalDynamicIslandBroadcast(styleKey, text) end)
     end
@@ -7489,7 +7480,6 @@ local function TXR_TagEngineInit()
         if S.__txApplyGlowForOpenProfile then pcall(S.__txApplyGlowForOpenProfile) end
     end
 
-    -- ---------- core apply functions (mode: "replay" | "local" | "live") ----------
     local function applyGrant(tLow, tName, key, exp, byName, mode)
         if not BadgePresets[key] or key == "AICORE" then return end
         S.grantedTags[tLow] = S.grantedTags[tLow] or {}
@@ -7500,11 +7490,11 @@ local function TXR_TagEngineInit()
             S.currentOwnerBadge = key
             saveProfilePrefs()
             broadcastMyProfileStyle()
-            if mode == "live" then
+            if mode == "live" and not isVerifiedOwner(myLowName, lp.UserId) then
                 local tTitle = BadgePresets[key].Title
                 local remain = (exp == 0) and "PERMANENT" or fmtDur(exp - nowSec())
                 notifyIsland("TAGGIFT", "🎁 " .. tTitle .. "  •  " .. remain)
-                sysNote(string.format("🎁 Owner (%s) ne tumhe %s tag diya — %s (expires: %s). 'Live Tags' menu se select/hide kar sakte ho.", tostring(byName), tTitle, remain, fmtStamp(exp)))
+                sysNote(string.format("🎁 Owner (%s) gifted you the %s tag — %s (Expires: %s). Manage it in the 'Live Tags' menu.", tostring(byName), tTitle, remain, fmtStamp(exp)))
                 playSFX("broadcast")
             end
         else
@@ -7540,9 +7530,9 @@ local function TXR_TagEngineInit()
             end
             saveProfilePrefs()
             broadcastMyProfileStyle()
-            if mode == "live" then
-                notifyIsland("TAGLOST", "🗑️ Owner ne tumhara " .. ((key == "ALL") and "tags" or tostring(BadgePresets[key] and BadgePresets[key].Title or key)) .. " hata diya")
-                sysNote("🗑️ Owner ne tumhare gifted tag(s) wapis le liye.")
+            if mode == "live" and not isVerifiedOwner(myLowName, lp.UserId) then
+                notifyIsland("TAGLOST", "🗑️ Owner revoked your " .. ((key == "ALL") and "tags" or tostring(BadgePresets[key] and BadgePresets[key].Title or key)))
+                sysNote("🗑️ The Owner has revoked your gifted tag(s).")
             end
         else
             saveEngineDB()
@@ -7560,20 +7550,886 @@ local function TXR_TagEngineInit()
         end
         S.knownUsers[tLow] = S.knownUsers[tLow] or tName or tLow
         saveEngineDB()
-        if tLow == myLowName and mode == "live" then
+        if tLow == myLowName and mode == "live" and not isVerifiedOwner(myLowName, lp.UserId) then
             if style > 0 then
                 local remain = (exp == 0) and "PERMANENT" or fmtDur(exp - nowSec())
-                notifyIsland("GLOWGIFT", "✨ " .. GlowPresets[style].name .. " glow  •  " .. remain)
-                sysNote(string.format("✨ Owner ne tumhe Premium Profile Glow '%s' diya — %s (expires: %s). Apna profile kholke dekho!", GlowPresets[style].name, remain, fmtStamp(exp)))
+                notifyIsland("GLOWGIFT", "✨ " .. GlowPresets[style].name .. " Glow  •  " .. remain)
+                sysNote(string.format("✨ Owner gifted you the Premium Profile Glow '%s' — %s (Expires: %s). Open your profile to view!", GlowPresets[style].name, remain, fmtStamp(exp)))
                 playSFX("broadcast")
             else
-                notifyIsland("TAGLOST", "✨ Tumhara Premium Glow hata diya gaya")
+                notifyIsland("TAGLOST", "✨ Your Premium Profile Glow was removed")
             end
         end
         refreshAll()
     end
 
-    -- ---------- packet processing (hooked on the existing /messages poll) ----------
+    -- =====================================================
+    -- ⚡ TXR 60-FPS FLUID ANIMATED AVATAR FRAMES (V9 INTEGRATED)
+    -- =====================================================
+    local FrameDefs = {
+        {
+            id = 1, kind = "ANIME", name = "24K LIQUID GOLD PLASMA", tag = "OWNER / VIP",
+            c1 = rgb(255, 204, 38), c2 = rgb(255, 253, 220), c3 = rgb(165, 68, 2),
+            seq = makeExactSeq({ rgb(255, 192, 22), rgb(255, 240, 130), rgb(255, 255, 248), rgb(160, 65, 2), rgb(255, 222, 75), rgb(255, 192, 22) }),
+            anim = "GOLD_PLASMA"
+        },
+        {
+            id = 2, kind = "ANIME", name = "SUKUNA MALEVOLENT SLASH", tag = "ANIME MYTHIC",
+            c1 = rgb(255, 25, 55), c2 = rgb(255, 145, 165), c3 = rgb(90, 0, 15),
+            seq = makeExactSeq({ rgb(255, 15, 45), rgb(20, 2, 8), rgb(255, 135, 155), rgb(255, 235, 240), rgb(150, 0, 22), rgb(255, 15, 45) }),
+            anim = "SUKUNA_SLASH"
+        },
+        {
+            id = 3, kind = "ANIME", name = "GOJO INFINITY DOMAIN", tag = "LIMITLESS",
+            c1 = rgb(175, 65, 255), c2 = rgb(0, 195, 255), c3 = rgb(255, 45, 85),
+            seq = makeExactSeq({ rgb(0, 195, 255), rgb(135, 115, 255), rgb(185, 65, 255), rgb(255, 45, 85), rgb(245, 210, 255), rgb(0, 195, 255) }),
+            anim = "GOJO_INFINITY"
+        },
+        {
+            id = 4, kind = "COSMIC", name = "VOID ECLIPSE CORONA", tag = "DISCORD NITRO",
+            c1 = rgb(165, 85, 255), c2 = rgb(245, 235, 255), c3 = rgb(75, 20, 160),
+            seq = makeExactSeq({ rgb(155, 70, 255), rgb(255, 250, 255), rgb(55, 10, 135), rgb(205, 140, 255), rgb(155, 70, 255) }),
+            anim = "VOID_ECLIPSE"
+        },
+        {
+            id = 5, kind = "COSMIC", name = "PHANTOM THUNDERBOLT", tag = "HIGH VOLTAGE",
+            c1 = rgb(65, 215, 255), c2 = rgb(255, 255, 255), c3 = rgb(35, 95, 255),
+            seq = makeExactSeq({ rgb(40, 150, 255), rgb(255, 255, 255), rgb(110, 240, 255), rgb(30, 80, 235), rgb(40, 150, 255) }),
+            anim = "THUNDERBOLT"
+        },
+        {
+            id = 6, kind = "COSMIC", name = "CYBERNETIC SONAR PULSE", tag = "SCI-FI",
+            c1 = rgb(0, 245, 255), c2 = rgb(165, 75, 255), c3 = rgb(235, 255, 255),
+            seq = makeExactSeq({ rgb(0, 245, 255), rgb(165, 75, 255), rgb(245, 255, 255), rgb(0, 245, 255) }),
+            anim = "SONAR_PULSE"
+        },
+        {
+            id = 7, kind = "ANIME", name = "SAKURA SILK STREAM", tag = "AESTHETIC",
+            c1 = rgb(255, 135, 200), c2 = rgb(255, 248, 253), c3 = rgb(255, 85, 165),
+            seq = makeExactSeq({ rgb(255, 125, 195), rgb(255, 250, 254), rgb(255, 175, 220), rgb(255, 125, 195) }),
+            anim = "SILK_COMETS"
+        },
+        {
+            id = 8, kind = "ANIME", name = "CRIMSON DRAGON VORTEX", tag = "DANGER AURA",
+            c1 = rgb(255, 45, 35), c2 = rgb(255, 195, 65), c3 = rgb(135, 0, 25),
+            seq = makeExactSeq({ rgb(255, 30, 30), rgb(255, 175, 35), rgb(255, 248, 175), rgb(255, 30, 30) }),
+            anim = "DRAGON_VORTEX"
+        },
+        {
+            id = 9, kind = "COSMIC", name = "SOLAR ECLIPSE FLARE", tag = "SUPERNOVA",
+            c1 = rgb(255, 125, 25), c2 = rgb(255, 238, 155), c3 = rgb(165, 35, 0),
+            seq = makeExactSeq({ rgb(255, 115, 15), rgb(255, 245, 185), rgb(175, 35, 5), rgb(255, 160, 50), rgb(255, 115, 15) }),
+            anim = "SOLAR_FLARE"
+        },
+        {
+            id = 10, kind = "COSMIC", name = "AURORA BOREALIS WAVE", tag = "MYTHIC",
+            c1 = rgb(20, 245, 165), c2 = rgb(155, 115, 255), c3 = rgb(0, 225, 255),
+            seq = makeExactSeq({ rgb(20, 245, 165), rgb(0, 235, 255), rgb(165, 95, 255), rgb(20, 245, 165) }),
+            anim = "AURORA_WAVE"
+        },
+        {
+            id = 11, kind = "COSMIC", name = "QUANTUM 3D HELIX", tag = "COSMIC 3D",
+            c1 = rgb(255, 75, 185), c2 = rgb(0, 240, 255), c3 = rgb(255, 235, 115),
+            seq = makeExactSeq({ rgb(255, 75, 185), rgb(0, 240, 255), rgb(255, 245, 155), rgb(255, 75, 185) }),
+            anim = "HELIX_3D"
+        },
+        {
+            id = 12, kind = "COSMIC", name = "EMERALD MATRIX PULSE", tag = "HACKER / DEV",
+            c1 = rgb(0, 255, 120), c2 = rgb(205, 255, 225), c3 = rgb(0, 125, 55),
+            seq = makeExactSeq({ rgb(0, 255, 115), rgb(205, 255, 225), rgb(0, 135, 60), rgb(55, 255, 155), rgb(0, 255, 115) }),
+            anim = "MATRIX_PULSE"
+        },
+        {
+            id = 13, kind = "COSMIC", name = "CYBER PRISM OVERDRIVE", tag = "RGB ELITE",
+            c1 = rgb(0, 255, 195), c2 = rgb(255, 85, 195), c3 = rgb(255, 220, 50),
+            seq = makeExactSeq({ rgb(255, 50, 130), rgb(255, 220, 50), rgb(0, 255, 180), rgb(45, 150, 255), rgb(255, 50, 130) }),
+            anim = "CYBER_PRISM"
+        },
+        {
+            id = 14, kind = "ANIME", name = "BLOOD MOON CHRONOS", tag = "ARCANE",
+            c1 = rgb(225, 25, 65), c2 = rgb(255, 215, 115), c3 = rgb(110, 10, 30),
+            seq = makeExactSeq({ rgb(225, 25, 65), rgb(255, 215, 115), rgb(115, 10, 30), rgb(255, 85, 115), rgb(225, 25, 65) }),
+            anim = "BLOOD_CHRONOS"
+        },
+        {
+            id = 15, kind = "ANIME", name = "CELESTIAL DIVINE HALO", tag = "LEGENDARY",
+            c1 = rgb(125, 220, 255), c2 = rgb(255, 255, 255), c3 = rgb(55, 145, 255),
+            seq = makeExactSeq({ rgb(110, 215, 255), rgb(255, 255, 255), rgb(65, 155, 255), rgb(235, 252, 255), rgb(110, 215, 255) }),
+            anim = "DIVINE_HALO"
+        },
+        {
+            id = 16, kind = "COUPLE", name = "YIN-YANG SOULMATES", tag = "COUPLES DUO",
+            c1 = rgb(245, 248, 255), c2 = rgb(150, 165, 195), c3 = rgb(15, 18, 28),
+            seq = makeExactSeq({ rgb(255, 255, 255), rgb(18, 22, 34), rgb(230, 238, 255), rgb(14, 17, 26), rgb(255, 255, 255) }),
+            anim = "COUPLE_YINYANG"
+        },
+        {
+            id = 17, kind = "COUPLE", name = "TWIN FLAME ECLIPSE", tag = "COUPLES DUO",
+            c1 = rgb(255, 55, 135), c2 = rgb(0, 235, 255), c3 = rgb(255, 195, 230),
+            seq = makeExactSeq({ rgb(0, 235, 255), rgb(255, 55, 135), rgb(255, 235, 250), rgb(0, 235, 255) }),
+            anim = "COUPLE_TWINFLAME"
+        },
+        {
+            id = 18, kind = "COUPLE", name = "CELESTIAL SUN & MOON", tag = "COUPLES DUO",
+            c1 = rgb(255, 195, 55), c2 = rgb(155, 220, 255), c3 = rgb(255, 248, 220),
+            seq = makeExactSeq({ rgb(255, 195, 55), rgb(255, 252, 230), rgb(140, 210, 255), rgb(255, 195, 55) }),
+            anim = "COUPLE_SUNMOON"
+        },
+        {
+            id = 19, kind = "COUPLE", name = "CRIMSON HEARTBEAT DUO", tag = "COUPLES DUO",
+            c1 = rgb(255, 45, 105), c2 = rgb(255, 195, 220), c3 = rgb(175, 15, 65),
+            seq = makeExactSeq({ rgb(255, 45, 105), rgb(255, 205, 228), rgb(195, 20, 75), rgb(255, 105, 155), rgb(255, 45, 105) }),
+            anim = "COUPLE_HEARTBEAT"
+        },
+        {
+            id = 20, kind = "COUPLE", name = "ETERNAL LOVE RIBBONS", tag = "COUPLES DUO",
+            c1 = rgb(255, 145, 185), c2 = rgb(255, 238, 218), c3 = rgb(235, 95, 145),
+            seq = makeExactSeq({ rgb(255, 145, 185), rgb(255, 245, 228), rgb(245, 110, 155), rgb(255, 145, 185) }),
+            anim = "COUPLE_INFINITY"
+        }
+    }
+    S.__txFrameDefs = FrameDefs
+
+    local function getFrameRec(low)
+        local rec = low and S.profileFrame[low]
+        if rec and rec.style and rec.style > 0 and FrameDefs[rec.style] and (not rec.exp or rec.exp == 0 or rec.exp > nowSec()) then
+            return rec
+        end
+        return nil
+    end
+    S.__txGetFrameRec = getFrameRec
+
+    local frameRoot, frameBackLayer, frameFrontLayer, frameAnim = nil, nil, nil, nil
+    local function clearFrameDeco()
+        if frameRoot then pcall(function() frameRoot:Destroy() end) end
+        frameRoot, frameBackLayer, frameFrontLayer, frameAnim = nil, nil, nil, nil
+    end
+
+    local function makeEnergyArc(parent, diameter, thick, seq, transSeq, z)
+        local ring = mk("Frame", parent, {
+            Size = UDim2.fromOffset(diameter, diameter), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+            BackgroundTransparency = 1, ZIndex = z, Corner = UDim.new(1, 0)
+        })
+        local st = mk("UIStroke", ring, { Thickness = thick, Color = Color3.new(1, 1, 1), ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+        local gr = mk("UIGradient", st, { Color = seq, Transparency = transSeq })
+        return ring, st, gr
+    end
+
+    local function buildFrameDeco(item)
+        clearFrameDeco()
+        -- Positioned directly over Profile Modal Avatar (Avatar center is at x=60, y=88 inside profileModal, diameter 74)
+        local root = mk("Frame", UI.profileModal, {
+            Size = UDim2.fromOffset(138, 138), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(60, 88),
+            BackgroundTransparency = 1, ZIndex = 335
+        })
+        frameRoot = root
+
+        -- Ultra-Smooth 16-Layer Velvet Radial Aura Stack
+        local auraLayers = {}
+        for i = 1, 16 do
+            local d = 75 + (i * 3.2)
+            local baseTrans = 0.925 + (i / 16) * 0.068
+            local layer = mk("Frame", root, {
+                Size = UDim2.fromOffset(d, d), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+                BackgroundColor3 = (i <= 6) and item.c2 or item.c1,
+                BackgroundTransparency = baseTrans, BorderSizePixel = 0, ZIndex = 335, Corner = UDim.new(1, 0)
+            })
+            table.insert(auraLayers, { obj = layer, baseT = baseTrans })
+        end
+
+        local backLayer = mk("Frame", root, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 336 })
+        local frontLayer = mk("Frame", root, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 342 })
+        frameBackLayer, frameFrontLayer = backLayer, frontLayer
+
+        local st = {
+            anim = item.anim,
+            auraLayers = auraLayers,
+            grads = {}, particles = {}, rings = {}, slashes = {}, extras = {},
+            backLayer = backLayer, frontLayer = frontLayer
+        }
+
+        -- Razor-Sharp Inner Rim + Specular Metallic Rim + Glass Shimmer
+        local _, _, innerRimGr = makeEnergyArc(
+            frontLayer, 74.4, 0.9,
+            makeExactSeq({ Color3.new(1, 1, 1), item.c2, Color3.new(1, 1, 1) }),
+            NumberSequence.new({ nsk(0, 0.30), nsk(0.5, 0.75), nsk(1, 0.30) }), 345
+        )
+        local _, _, baseGr = makeEnergyArc(
+            frontLayer, 77.8, 2.6, item.seq,
+            NumberSequence.new({ nsk(0, 0.02), nsk(0.5, 0.16), nsk(1, 0.02) }), 343
+        )
+        local _, _, shimmerGr = makeEnergyArc(
+            frontLayer, 75.8, 1.2,
+            makeExactSeq({ Color3.new(1, 1, 1), item.c2, Color3.new(1, 1, 1) }),
+            NumberSequence.new({ nsk(0, 0.99), nsk(0.22, 0.10), nsk(0.45, 0.99), nsk(0.72, 0.10), nsk(1, 0.99) }), 344
+        )
+        table.insert(st.grads, { g = innerRimGr, spd = -150 })
+        table.insert(st.grads, { g = baseGr, spd = 108 })
+        table.insert(st.grads, { g = shimmerGr, spd = -205 })
+
+        -- Dual Counter-Rotating Energy Arcs
+        local arcMask1 = NumberSequence.new({ nsk(0, 0.01), nsk(0.22, 0.14), nsk(0.42, 0.99), nsk(0.58, 0.99), nsk(0.78, 0.14), nsk(1, 0.01) })
+        local arcMask2 = NumberSequence.new({ nsk(0, 0.99), nsk(0.20, 0.01), nsk(0.40, 0.99), nsk(0.70, 0.01), nsk(1, 0.99) })
+
+        local _, _, gArc1 = makeEnergyArc(frontLayer, 85, 2.2, item.seq, arcMask1, 344)
+        local _, _, gArc2 = makeEnergyArc(frontLayer, 92, 1.4, item.seq, arcMask2, 343)
+        table.insert(st.grads, { g = gArc1, spd = 180 })
+        table.insert(st.grads, { g = gArc2, spd = -140 })
+
+        if item.anim == "GOLD_PLASMA" then
+            local _, _, bronzeGrooveGr = makeEnergyArc(
+                frontLayer, 80.6, 2.2,
+                makeExactSeq({ rgb(125, 45, 0), rgb(255, 225, 90), rgb(85, 28, 0), rgb(255, 250, 190), rgb(125, 45, 0) }),
+                NumberSequence.new({ nsk(0, 0.05), nsk(0.5, 0.35), nsk(1, 0.05) }), 343
+            )
+            local _, _, liquidSheenGr = makeEnergyArc(
+                frontLayer, 83.2, 1.1,
+                makeExactSeq({ rgb(255, 255, 245), rgb(255, 215, 50), rgb(255, 255, 245) }),
+                NumberSequence.new({ nsk(0, 0.99), nsk(0.18, 0.05), nsk(0.36, 0.99), nsk(0.68, 0.05), nsk(0.86, 0.99), nsk(1, 0.99) }), 345
+            )
+            local _, _, crownArcGr = makeEnergyArc(
+                frontLayer, 96.8, 1.2,
+                makeExactSeq({ rgb(255, 210, 45), rgb(255, 255, 245), rgb(195, 88, 4) }),
+                NumberSequence.new({ nsk(0, 0.99), nsk(0.12, 0.02), nsk(0.28, 0.99), nsk(0.50, 0.04), nsk(0.66, 0.99), nsk(0.85, 0.02), nsk(1, 0.99) }), 344
+            )
+            table.insert(st.grads, { g = bronzeGrooveGr, spd = -90 })
+            table.insert(st.grads, { g = liquidSheenGr, spd = 250 })
+            table.insert(st.grads, { g = crownArcGr, spd = -175 })
+
+            for i = 1, 18 do
+                local bloomSz = (i % 3 == 0) and 8.5 or 5.5
+                local softBloom = mk("ImageLabel", frontLayer, {
+                    Size = UDim2.fromOffset(bloomSz, bloomSz), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundTransparency = 1,
+                    Image = "rbxasset://textures/particles/sparkles_main.dds",
+                    ImageColor3 = (i % 2 == 0) and item.c2 or item.c1,
+                    ImageTransparency = 0.15,
+                    ZIndex = 346
+                })
+                local pinPoint = mk("Frame", softBloom, {
+                    Size = UDim2.fromOffset(1, 1), AnchorPoint = Vector2.new(0.5, 0.5),
+                    Position = UDim2.fromScale(0.5, 0.5),
+                    BackgroundColor3 = rgb(255, 254, 235),
+                    BorderSizePixel = 0, ZIndex = 347
+                })
+                table.insert(st.particles, {
+                    obj = softBloom, pin = pinPoint, baseSz = bloomSz,
+                    xOff = math.cos(i * 1.7) * (24 + (i % 4) * 5),
+                    ph = i * 0.55, spd = 0.72 + (i % 3) * 0.24
+                })
+            end
+
+        elseif item.anim == "SUKUNA_SLASH" then
+            for i = 1, 6 do
+                local slash = mk("Frame", frontLayer, {
+                    Size = UDim2.fromOffset(32, 1.9), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 2 == 0) and item.c2 or item.c1,
+                    BorderSizePixel = 0, ZIndex = 346, Corner = UDim.new(1, 0)
+                })
+                mk("UIGradient", slash, {
+                    Transparency = NumberSequence.new({ nsk(0, 1), nsk(0.28, 0.02), nsk(0.72, 0.02), nsk(1, 1) })
+                })
+                table.insert(st.slashes, { obj = slash, ph = (i / 6) * math.pi * 2, spd = 4.6, rad = 44 + (i % 2) * 4 })
+            end
+
+        elseif item.anim == "GOJO_INFINITY" then
+            local blueCore = mk("Frame", frontLayer, {
+                Size = UDim2.fromOffset(8.8, 8.8), AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = rgb(215, 248, 255), BorderSizePixel = 0, ZIndex = 347, Corner = UDim.new(1, 0),
+                Stroke = { Color = rgb(0, 195, 255), Thickness = 1.8 }
+            })
+            local redCore = mk("Frame", frontLayer, {
+                Size = UDim2.fromOffset(8.8, 8.8), AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = rgb(255, 215, 225), BorderSizePixel = 0, ZIndex = 347, Corner = UDim.new(1, 0),
+                Stroke = { Color = rgb(255, 45, 85), Thickness = 1.8 }
+            })
+            table.insert(st.extras, { blue = blueCore, red = redCore })
+
+            for i = 1, 14 do
+                local orb = mk("Frame", backLayer, {
+                    Size = UDim2.fromOffset(3.2, 3.2), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 2 == 0) and item.c1 or item.c2,
+                    BorderSizePixel = 0, ZIndex = 336, Corner = UDim.new(1, 0)
+                })
+                table.insert(st.particles, { obj = orb, ph = (i / 14) * math.pi * 2, spd = 1.8 })
+            end
+
+        elseif item.anim == "VOID_ECLIPSE" then
+            local _, _, voidGr = makeEnergyArc(
+                frontLayer, 81, 3.0,
+                makeExactSeq({ rgb(12, 4, 22), rgb(175, 95, 255), rgb(12, 4, 22) }),
+                NumberSequence.new({ nsk(0, 0.04), nsk(1, 0.04) }), 344
+            )
+            table.insert(st.grads, { g = voidGr, spd = -220 })
+            for i = 1, 16 do
+                local orb = mk("Frame", backLayer, {
+                    Size = UDim2.fromOffset(3.6, 3.6), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 2 == 0) and item.c2 or item.c1,
+                    BorderSizePixel = 0, ZIndex = 336, Corner = UDim.new(1, 0)
+                })
+                table.insert(st.particles, { obj = orb, ph = (i / 16) * math.pi * 2, spd = 1.5 })
+            end
+
+        elseif item.anim == "THUNDERBOLT" then
+            for i = 1, 8 do
+                local bolt = mk("Frame", frontLayer, {
+                    Size = UDim2.fromOffset(18, 1.6), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 2 == 0) and item.c2 or item.c1,
+                    BorderSizePixel = 0, ZIndex = 346, Corner = UDim.new(1, 0)
+                })
+                table.insert(st.slashes, { obj = bolt, ph = (i / 8) * math.pi * 2, spd = 5.5, rad = 45 })
+            end
+            for i = 1, 12 do
+                local spark = mk("Frame", frontLayer, {
+                    Size = UDim2.fromOffset(2.8, 2.8), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = item.c2, BorderSizePixel = 0, ZIndex = 347, Corner = UDim.new(1, 0)
+                })
+                table.insert(st.particles, { obj = spark, ang = (i / 12) * math.pi * 2, ph = i * 1.3 })
+            end
+
+        elseif item.anim == "SONAR_PULSE" then
+            for i = 1, 3 do
+                local r = mk("Frame", backLayer, {
+                    Size = UDim2.fromOffset(76, 76), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+                    BackgroundTransparency = 1, ZIndex = 336, Corner = UDim.new(1, 0)
+                })
+                local sStroke = mk("UIStroke", r, { Thickness = 1.5, Color = (i % 2 == 0) and item.c2 or item.c1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+                table.insert(st.rings, { f = r, st = sStroke, ph = (i - 1) / 3 })
+            end
+
+        elseif item.anim == "SILK_COMETS" then
+            for comet = 1, 3 do
+                local basePh = (comet / 3) * math.pi * 2
+                for trail = 1, 8 do
+                    local sz = math.max(1.6, 7.2 - trail * 0.70)
+                    local dot = mk("Frame", frontLayer, {
+                        Size = UDim2.fromOffset(sz, sz), AnchorPoint = Vector2.new(0.5, 0.5),
+                        BackgroundColor3 = (trail <= 2) and item.c2 or item.c1,
+                        BackgroundTransparency = (trail - 1) * 0.11,
+                        BorderSizePixel = 0, ZIndex = 346, Corner = UDim.new(1, 0)
+                    })
+                    table.insert(st.particles, {
+                        obj = dot, ph = basePh - (trail * 0.10),
+                        rad = 43.5 + math.sin(comet) * 2, spd = 2.3
+                    })
+                end
+            end
+
+        elseif item.anim == "DRAGON_VORTEX" then
+            for i = 1, 22 do
+                local wisp = mk("Frame", backLayer, {
+                    Size = UDim2.fromOffset(3.8, 3.8), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 3 == 0) and item.c2 or item.c1,
+                    BorderSizePixel = 0, ZIndex = 336, Corner = UDim.new(1, 0)
+                })
+                table.insert(st.particles, { obj = wisp, ph = (i / 22) * math.pi * 2, spd = 0.9 + (i % 4) * 0.15 })
+            end
+
+        elseif item.anim == "SOLAR_FLARE" then
+            local _, _, eclipseGr = makeEnergyArc(
+                frontLayer, 80, 2.8,
+                makeExactSeq({ rgb(18, 6, 2), rgb(255, 145, 30), rgb(18, 6, 2) }),
+                NumberSequence.new({ nsk(0, 0.04), nsk(1, 0.04) }), 344
+            )
+            table.insert(st.grads, { g = eclipseGr, spd = 140 })
+            for i = 1, 18 do
+                local flare = mk("Frame", backLayer, {
+                    Size = UDim2.fromOffset(4.0, 4.0), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 2 == 0) and item.c2 or item.c1,
+                    BorderSizePixel = 0, ZIndex = 336, Corner = UDim.new(1, 0)
+                })
+                table.insert(st.particles, { obj = flare, ang = (i / 18) * math.pi * 2, ph = i * 0.35, spd = 1.1 + (i % 3) * 0.25 })
+            end
+
+        elseif item.anim == "AURORA_WAVE" or item.anim == "CYBER_PRISM" then
+            for i = 1, 4 do
+                local r, sStroke, gr = makeEnergyArc(
+                    backLayer, 84 + i * 5, 1.5, item.seq,
+                    NumberSequence.new({ nsk(0, 0.20), nsk(0.5, 0.78), nsk(1, 0.20) }), 336
+                )
+                table.insert(st.grads, { g = gr, spd = (i % 2 == 0) and 90 or -90 })
+                table.insert(st.rings, { f = r, st = sStroke, baseD = 84 + i * 5, ph = i * 0.8 })
+            end
+
+        elseif item.anim == "HELIX_3D" then
+            for strand = 1, 2 do
+                for i = 1, 10 do
+                    local orb = mk("Frame", frontLayer, {
+                        Size = UDim2.fromOffset(4.2, 4.2), AnchorPoint = Vector2.new(0.5, 0.5),
+                        BackgroundColor3 = (strand == 1) and item.c1 or item.c2,
+                        BorderSizePixel = 0, ZIndex = 345, Corner = UDim.new(1, 0),
+                        Stroke = { Color = Color3.new(1, 1, 1), Thickness = 0.6, Transparency = 0.5 }
+                    })
+                    table.insert(st.particles, {
+                        obj = orb, ph = (i / 10) * math.pi * 2 + (strand == 2 and math.pi or 0)
+                    })
+                end
+            end
+
+        elseif item.anim == "MATRIX_PULSE" then
+            local _, _, radarGr = makeEnergyArc(
+                frontLayer, 89, 2.6, item.seq,
+                NumberSequence.new({ nsk(0, 0.01), nsk(0.28, 0.99), nsk(1, 0.99) }), 345
+            )
+            table.insert(st.grads, { g = radarGr, spd = 260 })
+            for i = 1, 16 do
+                local bit = mk("Frame", frontLayer, {
+                    Size = UDim2.fromOffset(2.6, 5.0), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 2 == 0) and item.c2 or item.c1,
+                    BorderSizePixel = 0, ZIndex = 346, Corner = UDim.new(0, 1.5)
+                })
+                table.insert(st.particles, {
+                    obj = bit, xOff = math.cos(i * 1.9) * (25 + (i % 4) * 5),
+                    ph = i * 0.6, spd = 0.85 + (i % 3) * 0.2
+                })
+            end
+
+        elseif item.anim == "BLOOD_CHRONOS" then
+            local _, _, chronosGr = makeEnergyArc(
+                backLayer, 98, 1.6, item.seq,
+                NumberSequence.new({ nsk(0, 0.08), nsk(0.25, 0.86), nsk(0.5, 0.08), nsk(0.75, 0.86), nsk(1, 0.08) }), 336
+            )
+            table.insert(st.grads, { g = chronosGr, spd = -75 })
+            for i = 1, 4 do
+                local moon = mk("Frame", frontLayer, {
+                    Size = UDim2.fromOffset(6.8, 6.8), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 2 == 0) and item.c2 or item.c1,
+                    BorderSizePixel = 0, ZIndex = 346, Corner = UDim.new(1, 0),
+                    Stroke = { Color = rgb(255, 245, 215), Thickness = 1.1 }
+                })
+                table.insert(st.particles, { obj = moon, ph = (i / 4) * math.pi * 2, spd = 1.35 })
+            end
+
+        elseif item.anim == "DIVINE_HALO" then
+            for i = 1, 16 do
+                local star = mk("Frame", frontLayer, {
+                    Size = UDim2.fromOffset(3.2, 3.2), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 2 == 0) and item.c2 or item.c1,
+                    BorderSizePixel = 0, ZIndex = 346, Corner = UDim.new(1, 0)
+                })
+                table.insert(st.particles, {
+                    obj = star, ang = (i / 16) * math.pi * 2, ph = i * 0.4
+                })
+            end
+
+        elseif item.anim == "COUPLE_YINYANG" then
+            local yangOrb = mk("Frame", frontLayer, {
+                Size = UDim2.fromOffset(9.5, 9.5), AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = rgb(255, 255, 255), BorderSizePixel = 0, ZIndex = 348, Corner = UDim.new(1, 0),
+                Stroke = { Color = rgb(160, 185, 235), Thickness = 1.5 }
+            })
+            local yinOrb = mk("Frame", frontLayer, {
+                Size = UDim2.fromOffset(9.5, 9.5), AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = rgb(14, 17, 26), BorderSizePixel = 0, ZIndex = 348, Corner = UDim.new(1, 0),
+                Stroke = { Color = rgb(245, 248, 255), Thickness = 1.5 }
+            })
+            table.insert(st.extras, { a = yangOrb, b = yinOrb })
+
+            for side = 1, 2 do
+                local basePh = (side == 1) and 0 or math.pi
+                for trail = 1, 7 do
+                    local sz = math.max(1.8, 7.2 - trail * 0.72)
+                    local tDot = mk("Frame", frontLayer, {
+                        Size = UDim2.fromOffset(sz, sz), AnchorPoint = Vector2.new(0.5, 0.5),
+                        BackgroundColor3 = (side == 1) and rgb(245, 248, 255) or rgb(45, 55, 80),
+                        BackgroundTransparency = trail * 0.11,
+                        BorderSizePixel = 0, ZIndex = 346, Corner = UDim.new(1, 0)
+                    })
+                    table.insert(st.particles, { obj = tDot, ph = basePh - trail * 0.12, rad = 44.5, spd = 2.0 })
+                end
+            end
+
+        elseif item.anim == "COUPLE_TWINFLAME" then
+            for flame = 1, 2 do
+                local basePh = (flame == 1) and 0 or math.pi
+                local col = (flame == 1) and rgb(0, 235, 255) or rgb(255, 55, 135)
+                for trail = 1, 9 do
+                    local sz = math.max(1.8, 7.8 - trail * 0.66)
+                    local dot = mk("Frame", frontLayer, {
+                        Size = UDim2.fromOffset(sz, sz), AnchorPoint = Vector2.new(0.5, 0.5),
+                        BackgroundColor3 = (trail <= 2) and rgb(255, 248, 255) or col,
+                        BackgroundTransparency = (trail - 1) * 0.10,
+                        BorderSizePixel = 0, ZIndex = 347, Corner = UDim.new(1, 0)
+                    })
+                    table.insert(st.particles, {
+                        obj = dot, flame = flame, ph = basePh - trail * 0.10, spd = 2.4
+                    })
+                end
+            end
+
+        elseif item.anim == "COUPLE_SUNMOON" then
+            local sunCore = mk("Frame", frontLayer, {
+                Size = UDim2.fromOffset(10, 10), AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = rgb(255, 200, 55), BorderSizePixel = 0, ZIndex = 348, Corner = UDim.new(1, 0),
+                Stroke = { Color = rgb(255, 252, 220), Thickness = 1.6 }
+            })
+            local moonCore = mk("Frame", frontLayer, {
+                Size = UDim2.fromOffset(9, 9), AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = rgb(165, 220, 255), BorderSizePixel = 0, ZIndex = 348, Corner = UDim.new(1, 0),
+                Stroke = { Color = rgb(255, 255, 255), Thickness = 1.6 }
+            })
+            table.insert(st.extras, { sun = sunCore, moon = moonCore })
+
+            for i = 1, 14 do
+                local star = mk("Frame", backLayer, {
+                    Size = UDim2.fromOffset(3.0, 3.0), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 2 == 0) and item.c1 or item.c2,
+                    BorderSizePixel = 0, ZIndex = 336, Corner = UDim.new(1, 0)
+                })
+                table.insert(st.particles, { obj = star, ang = (i / 14) * math.pi * 2, ph = i * 0.5 })
+            end
+
+        elseif item.anim == "COUPLE_HEARTBEAT" then
+            for i = 1, 4 do
+                local r = mk("Frame", backLayer, {
+                    Size = UDim2.fromOffset(76, 76), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+                    BackgroundTransparency = 1, ZIndex = 336, Corner = UDim.new(1, 0)
+                })
+                local sStroke = mk("UIStroke", r, { Thickness = 1.8, Color = (i % 2 == 0) and item.c2 or item.c1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+                table.insert(st.rings, { f = r, st = sStroke, ph = (i - 1) * 0.25 })
+            end
+            for i = 1, 14 do
+                local spark = mk("Frame", frontLayer, {
+                    Size = UDim2.fromOffset(3.4, 3.4), AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = (i % 2 == 0) and item.c2 or item.c1,
+                    BorderSizePixel = 0, ZIndex = 346, Corner = UDim.new(1, 0)
+                })
+                table.insert(st.particles, {
+                    obj = spark, xOff = math.cos(i * 1.8) * (24 + (i % 4) * 5),
+                    ph = i * 0.6, spd = 0.75 + (i % 3) * 0.2
+                })
+            end
+
+        elseif item.anim == "COUPLE_INFINITY" then
+            for strand = 1, 2 do
+                for i = 1, 12 do
+                    local sz = math.max(2.2, 5.8 - (i % 6) * 0.45)
+                    local orb = mk("Frame", frontLayer, {
+                        Size = UDim2.fromOffset(sz, sz), AnchorPoint = Vector2.new(0.5, 0.5),
+                        BackgroundColor3 = (strand == 1) and item.c1 or item.c2,
+                        BorderSizePixel = 0, ZIndex = 346, Corner = UDim.new(1, 0)
+                    })
+                    table.insert(st.particles, {
+                        obj = orb, ph = (i / 12) * math.pi * 2 + (strand == 2 and math.pi or 0)
+                    })
+                end
+            end
+        end
+
+        frameAnim = st
+    end
+
+    S.__txFrameKey = nil
+    S.__txApplyFrame = function(lowU)
+        lowU = lowU or (S.activeProfileUser and S.activeProfileUser:lower())
+        if not lowU then clearFrameDeco(); S.__txFrameKey = nil; return end
+        local rec = getFrameRec(lowU)
+        local key = lowU .. "_" .. tostring(rec and rec.style or 0)
+        if key == S.__txFrameKey and ((not rec) or (frameRoot and frameRoot.Parent)) then return end
+        S.__txFrameKey = key
+        if rec then buildFrameDeco(FrameDefs[rec.style]) else clearFrameDeco() end
+    end
+
+    local function applyFrame(tLow, tName, style, exp, partnerName, byName, mode)
+        style = tonumber(style) or 0
+        if style > #FrameDefs then return end
+        if style == 0 then
+            S.profileFrame[tLow] = nil
+        else
+            S.profileFrame[tLow] = { style = style, exp = exp or 0, t = nowSec(), by = byName or "OWNER", partner = (partnerName ~= nil and partnerName ~= "") and partnerName or nil }
+        end
+        S.knownUsers[tLow] = S.knownUsers[tLow] or tName or tLow
+        saveEngineDB()
+        if tLow == myLowName and mode == "live" and not isVerifiedOwner(myLowName, lp.UserId) then
+            if style > 0 then
+                local remain = (exp == 0) and "PERMANENT" or fmtDur(exp - nowSec())
+                notifyIsland("FRAMEGIFT", "🖼️ " .. FrameDefs[style].name .. " Frame  •  " .. remain)
+                sysNote(string.format("🖼️ Owner gifted you the Profile Frame '%s' — %s (Expires: %s). Open your profile to view!", FrameDefs[style].name, remain, fmtStamp(exp)))
+                playSFX("broadcast")
+            else
+                notifyIsland("TAGLOST", "🖼️ Your Profile Frame was removed")
+            end
+        end
+        S.__txFrameKey = nil
+        if UI.profileModal and UI.profileModal.Visible then pcall(S.__txApplyFrame) end
+        if S.rebuildEngineLists then pcall(S.rebuildEngineLists) end
+    end
+
+    pcall(function()
+        if S.isF(ENGINE_FILE) then
+            local raw = S.readF(ENGINE_FILE)
+            local dec = raw and Svc.Http:JSONDecode(raw)
+            if type(dec) == "table" and type(dec.frame) == "table" then
+                for low, rec in pairs(dec.frame) do
+                    if type(rec) == "table" and rec.style and FrameDefs[rec.style] and (not rec.exp or rec.exp == 0 or rec.exp > nowSec()) then
+                        S.profileFrame[low] = rec
+                    end
+                end
+            end
+        end
+    end)
+
+    do
+        local frT = 0
+        local frConn
+        frConn = Svc.Run.RenderStepped:Connect(function(dt)
+            if _G.TXR_ChatInstanceID ~= currentExecutionID or not UI.gui.Parent then
+                if frConn then frConn:Disconnect() end
+                return
+            end
+            local st = frameAnim
+            if not st or not frameRoot or not frameRoot.Parent then return end
+            if not UI.profileModal.Visible then frameRoot.Visible = false; return end
+            frameRoot.Visible = true
+            frT = frT + dt
+            local clk = frT
+            local activeAnim = st.anim
+
+            local breath = (math.sin(clk * 3.4) + 1) / 2
+            for _, al in ipairs(st.auraLayers or {}) do
+                al.obj.BackgroundTransparency = math.clamp(al.baseT + (breath * 0.022), 0, 0.996)
+            end
+
+            for _, gIt in ipairs(st.grads or {}) do
+                if gIt.g and gIt.g.Parent then
+                    gIt.g.Rotation = (clk * gIt.spd) % 360
+                end
+            end
+
+            if activeAnim == "GOLD_PLASMA" then
+                for _, p in ipairs(st.particles) do
+                    local prog = (clk * p.spd + p.ph) % 1
+                    local y = 38 - (prog * 82)
+                    local x = p.xOff + math.sin(clk * 3 + p.ph * 4) * 5
+                    local twinkle = 0.75 + 0.35 * math.sin(clk * 14 + p.ph * 7)
+                    local fade = (prog < 0.2) and (1 - prog * 5) or ((prog - 0.2) / 0.8)
+                    p.obj.Size = UDim2.fromOffset(p.baseSz * twinkle, p.baseSz * twinkle)
+                    p.obj.Position = UDim2.new(0.5, x, 0.5, y)
+                    p.obj.Rotation = (clk * 65 + p.ph * 90) % 360
+                    p.obj.ImageTransparency = math.clamp(fade, 0, 1)
+                    p.pin.BackgroundTransparency = math.clamp(fade, 0, 1)
+                end
+
+            elseif activeAnim == "SUKUNA_SLASH" then
+                for _, s in ipairs(st.slashes) do
+                    local a = clk * s.spd + s.ph
+                    local r = s.rad + math.sin(clk * 9 + s.ph) * 3.5
+                    s.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    s.obj.Rotation = math.deg(a) + 90
+                end
+
+            elseif activeAnim == "GOJO_INFINITY" then
+                local ex = st.extras[1]
+                if ex then
+                    local a = clk * 2.6
+                    local r = 45
+                    ex.blue.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    ex.red.Position  = UDim2.new(0.5, math.cos(a + math.pi) * r, 0.5, math.sin(a + math.pi) * r)
+                end
+                for _, p in ipairs(st.particles) do
+                    local a = -clk * p.spd + p.ph
+                    local r = 42 + math.sin(clk * 4 + p.ph) * 4
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                end
+
+            elseif activeAnim == "VOID_ECLIPSE" then
+                for _, p in ipairs(st.particles) do
+                    local a = clk * p.spd + p.ph
+                    local r = 46 + math.sin(clk * 5 + p.ph * 3) * 5
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    p.obj.BackgroundTransparency = 0.2 + ((math.sin(clk * 4 + p.ph) + 1) / 2) * 0.6
+                end
+
+            elseif activeAnim == "THUNDERBOLT" then
+                for _, s in ipairs(st.slashes) do
+                    local a = clk * s.spd + s.ph
+                    local jitter = math.sin(clk * 28 + s.ph * 5) * 4
+                    local r = s.rad + jitter
+                    s.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    s.obj.Rotation = math.deg(a) + 90 + jitter * 4
+                end
+                for _, p in ipairs(st.particles) do
+                    local a = p.ang - clk * 2.2
+                    local r = 42 + math.abs(math.sin(clk * 18 + p.ph)) * 12
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    p.obj.BackgroundTransparency = (math.sin(clk * 25 + p.ph) > 0.1) and 0.05 or 0.85
+                end
+
+            elseif activeAnim == "SONAR_PULSE" then
+                for _, r in ipairs(st.rings) do
+                    local prog = (clk * 0.65 + r.ph) % 1
+                    local d = 76 + prog * 44
+                    r.f.Size = UDim2.fromOffset(d, d)
+                    r.st.Transparency = prog
+                end
+
+            elseif activeAnim == "SILK_COMETS" then
+                for _, p in ipairs(st.particles) do
+                    local a = clk * p.spd + p.ph
+                    local r = p.rad + math.sin(clk * 2.5 + p.ph) * 2
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                end
+
+            elseif activeAnim == "DRAGON_VORTEX" then
+                for _, p in ipairs(st.particles) do
+                    local prog = (clk * p.spd + p.ph) % 1
+                    local r = 58 - (prog * 22)
+                    local a = p.ph + prog * 3.4
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    local sz = 2 + (1 - prog) * 3.5
+                    p.obj.Size = UDim2.fromOffset(sz, sz)
+                    p.obj.BackgroundTransparency = math.abs(prog - 0.45) * 1.6
+                end
+
+            elseif activeAnim == "SOLAR_FLARE" then
+                for _, p in ipairs(st.particles) do
+                    local prog = (clk * p.spd + p.ph) % 1
+                    local r = 40 + prog * 20
+                    local a = p.ang + clk * 0.7 + prog * 0.5
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    p.obj.BackgroundTransparency = prog
+                end
+
+            elseif activeAnim == "AURORA_WAVE" or activeAnim == "CYBER_PRISM" then
+                for _, r in ipairs(st.rings) do
+                    local w = math.sin(clk * 2.8 + r.ph) * 4.5
+                    r.f.Size = UDim2.fromOffset(r.baseD + w, r.baseD + w)
+                end
+
+            elseif activeAnim == "HELIX_3D" then
+                for _, p in ipairs(st.particles) do
+                    local a = clk * 2.2 + p.ph
+                    local x = math.cos(a) * 48
+                    local y = math.sin(a * 2) * 18
+                    local depth = math.sin(a)
+                    p.obj.Position = UDim2.new(0.5, x, 0.5, y)
+                    local targetParent = (depth > 0) and st.frontLayer or st.backLayer
+                    if p.obj.Parent ~= targetParent then
+                        p.obj.Parent = targetParent
+                    end
+                    local sz = 3.2 + ((depth + 1) / 2) * 3.2
+                    p.obj.Size = UDim2.fromOffset(sz, sz)
+                    p.obj.BackgroundTransparency = (depth > 0) and 0.05 or 0.55
+                end
+
+            elseif activeAnim == "MATRIX_PULSE" then
+                for _, p in ipairs(st.particles) do
+                    local prog = (clk * p.spd + p.ph) % 1
+                    local y = 40 - (prog * 84)
+                    p.obj.Position = UDim2.new(0.5, p.xOff, 0.5, y)
+                    p.obj.BackgroundTransparency = (prog < 0.2) and (1 - prog * 5) or ((prog - 0.2) / 0.8)
+                end
+
+            elseif activeAnim == "BLOOD_CHRONOS" then
+                for _, p in ipairs(st.particles) do
+                    local a = clk * p.spd + p.ph
+                    local r = 48
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                end
+
+            elseif activeAnim == "DIVINE_HALO" then
+                for _, p in ipairs(st.particles) do
+                    local a = p.ang + clk * 0.8
+                    local pulse = (math.sin(clk * 3 + p.ph) + 1) / 2
+                    local r = 44 + pulse * 8
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    p.obj.BackgroundTransparency = 0.15 + (1 - pulse) * 0.7
+                end
+
+            elseif activeAnim == "COUPLE_YINYANG" then
+                local ex = st.extras[1]
+                if ex then
+                    local a = clk * 2.0
+                    local r = 44.5
+                    ex.a.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    ex.b.Position = UDim2.new(0.5, math.cos(a + math.pi) * r, 0.5, math.sin(a + math.pi) * r)
+                end
+                for _, p in ipairs(st.particles) do
+                    local a = clk * p.spd + p.ph
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * p.rad, 0.5, math.sin(a) * p.rad)
+                end
+
+            elseif activeAnim == "COUPLE_TWINFLAME" then
+                for _, p in ipairs(st.particles) do
+                    local a = clk * p.spd + p.ph
+                    local wave = math.sin(clk * 4 + p.ph * 2) * (p.flame == 1 and 3.5 or -3.5)
+                    local r = 44 + wave
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                end
+
+            elseif activeAnim == "COUPLE_SUNMOON" then
+                local ex = st.extras[1]
+                if ex then
+                    local a = clk * 1.75
+                    local r = 45
+                    ex.sun.Position  = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    ex.moon.Position = UDim2.new(0.5, math.cos(a + math.pi) * r, 0.5, math.sin(a + math.pi) * r)
+                end
+                for _, p in ipairs(st.particles) do
+                    local a = p.ang - clk * 0.9
+                    local pulse = (math.sin(clk * 3.5 + p.ph) + 1) / 2
+                    local r = 43 + pulse * 7
+                    p.obj.Position = UDim2.new(0.5, math.cos(a) * r, 0.5, math.sin(a) * r)
+                    p.obj.BackgroundTransparency = 0.2 + (1 - pulse) * 0.65
+                end
+
+            elseif activeAnim == "COUPLE_HEARTBEAT" then
+                for _, r in ipairs(st.rings) do
+                    local prog = (clk * 0.75 + r.ph) % 1
+                    local d = 76 + prog * 46
+                    r.f.Size = UDim2.fromOffset(d, d)
+                    r.st.Transparency = prog
+                end
+                for _, p in ipairs(st.particles) do
+                    local prog = (clk * p.spd + p.ph) % 1
+                    local y = 38 - (prog * 80)
+                    local x = p.xOff + math.sin(clk * 3 + p.ph * 4) * 4
+                    p.obj.Position = UDim2.new(0.5, x, 0.5, y)
+                    p.obj.BackgroundTransparency = (prog < 0.2) and (1 - prog * 5) or ((prog - 0.2) / 0.8)
+                end
+
+            elseif activeAnim == "COUPLE_INFINITY" then
+                for _, p in ipairs(st.particles) do
+                    local t = clk * 2.1 + p.ph
+                    local denom = 1 + math.sin(t) ^ 2
+                    local x = (52 * math.cos(t)) / denom
+                    local y = (24 * math.sin(t) * math.cos(t)) / denom
+                    local depth = math.sin(t)
+                    p.obj.Position = UDim2.new(0.5, x, 0.5, y)
+                    local targetParent = (depth > 0) and st.frontLayer or st.backLayer
+                    if p.obj.Parent ~= targetParent then
+                        p.obj.Parent = targetParent
+                    end
+                    p.obj.BackgroundTransparency = (depth > 0) and 0.08 or 0.55
+                end
+            end
+        end)
+    end
+
+    task.spawn(function()
+        while _G.TXR_ChatInstanceID == currentExecutionID and UI.gui and UI.gui.Parent do
+            task.wait(1)
+            pcall(function()
+                local now, changed = nowSec(), false
+                for low, rec in pairs(S.profileFrame) do
+                    if rec.exp and rec.exp ~= 0 and rec.exp <= now then
+                        S.profileFrame[low] = nil
+                        changed = true
+                        if low == myLowName and not isVerifiedOwner(myLowName, lp.UserId) then
+                            notifyIsland("TAGLOST", "🖼️ Your Profile Frame has expired")
+                        end
+                    end
+                end
+                if changed then
+                    saveEngineDB()
+                    S.__txFrameKey = nil
+                    if UI.profileModal.Visible then S.__txApplyFrame() end
+                    if S.rebuildEngineLists then S.rebuildEngineLists() end
+                end
+            end)
+        end
+    end)
+
     local function processPacket(m, replay)
         if type(m) ~= "table" or type(m.msg) ~= "string" or type(m.user) ~= "string" then return end
         local pKey = tostring(m.id or (tostring(m.time) .. "_" .. m.user .. "_" .. m.msg))
@@ -7610,6 +8466,14 @@ local function TXR_TagEngineInit()
             return
         end
 
+        local fT, fS, fE, fP, fU = msg:match("^__FRAMESET__:([^|]+)|(%d+)|(%d+)|([^|]*)|?(.*)$")
+        if fT then
+            if verifySenderOwnership(actorLow, fU) then
+                applyFrame(fT:lower(), fT, tonumber(fS) or 0, tonumber(fE) or 0, fP, rawU, mode)
+            end
+            return
+        end
+
         local pk = msg:match("^__TAGPICK__:([%w_]+)|")
         if pk and not fromMe then
             if pk == "NONE" or isTagValid(actorLow, pk) then
@@ -7636,7 +8500,7 @@ local function TXR_TagEngineInit()
                             if type(m) == "table" and type(m.msg) == "string" then
                                 local p = m.msg:sub(1, 11)
                                 if p == "__TAGGIVE__:" or m.msg:sub(1, 12) == "__TAGGIVE__:" or m.msg:sub(1, 12) == "__TAGTAKE__:"
-                                    or m.msg:sub(1, 12) == "__GLOWSET__:" or m.msg:sub(1, 12) == "__TAGPICK__:" then
+                                    or m.msg:sub(1, 12) == "__GLOWSET__:" or m.msg:sub(1, 12) == "__TAGPICK__:" or m.msg:sub(1, 13) == "__FRAMESET__:" then
                                     table.insert(mine, m)
                                 end
                             end
@@ -7767,7 +8631,7 @@ local function TXR_TagEngineInit()
     end
 
     -- =====================================================
-    -- 👑 OWNER TAG ENGINE MODAL (TARGET + TAGS + TIMER + GLOW)
+    -- 👑 OWNER TAG ENGINE MODAL (TARGET + TAGS + TIMER + GLOW + 20 60-FPS FRAMES)
     -- =====================================================
     local engineTarget = lp.Name
     local engineTab = "GIRLS"
@@ -7784,7 +8648,7 @@ local function TXR_TagEngineInit()
 
     mk("TextLabel", UI.tagEngineModal, {
         Size = UDim2.new(1, -44, 0, 26), Position = UDim2.fromOffset(12, 5), BackgroundTransparency = 1,
-        Text = "🏷️ " .. sc("OWNER TAG ENGINE") .. "  •  " .. sc("TIMERS"), TextColor3 = GOLD,
+        Text = "🏷️ " .. sc("OWNER TAG ENGINE") .. "  •  " .. sc("60-FPS FRAMES"), TextColor3 = GOLD,
         Font = Enum.Font.GothamBlack, TextSize = 10.2, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 421
     })
     local teClose = mk("TextButton", UI.tagEngineModal, {
@@ -7825,7 +8689,6 @@ local function TXR_TagEngineInit()
         task.delay(1.1, function() if btn and btn.Parent then btn.Text = old end end)
     end
 
-    -- section 1: target
     local secTarget = section(74, 1)
     smallLabel(secTarget, "TARGET PLAYER (TAP OR TYPE USERNAME):", 0)
     local chipsScroll = mk("ScrollingFrame", secTarget, {
@@ -7846,7 +8709,6 @@ local function TXR_TagEngineInit()
     })
     applySpringHover(tgtSetBtn)
 
-    -- section 2: stat
     local secStat = section(22, 2)
     local statPill = mk("Frame", secStat, { Size = UDim2.fromScale(1, 1), BackgroundColor3 = rgb(15, 20, 32), ZIndex = 423, Corner = UDim.new(0, 8), Stroke = { Color = Colors.PrimaryDark, Thickness = 0.9, Transparency = 0.4 } })
     local statLbl = mk("TextLabel", statPill, {
@@ -7855,11 +8717,10 @@ local function TXR_TagEngineInit()
         TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 424
     })
 
-    -- section 3: tabs
     local secTabs = section(24, 3)
     local tabBtns = {}
-    local tabDefs = { { "GIRLS", "💗 GIRLS" }, { "TROLL", "😎 TROLL" }, { "SPECIAL", "⭐ SPECIAL" }, { "GLOW", "✨ GLOW" } }
-    -- section 4: grid
+    local tabDefs = { { "GIRLS", "💗 GIRLS" }, { "TROLL", "😎 TROLL" }, { "SPECIAL", "⭐ SPECIAL" }, { "GLOW", "✨ GLOW" }, { "FRAME", "🖼 FRAME (20)" } }
+
     local secGrid = section(124, 4)
     local teGrid = mk("ScrollingFrame", secGrid, {
         Size = UDim2.fromScale(1, 1), BackgroundColor3 = rgb(12, 17, 27), BackgroundTransparency = 0.2, ScrollBarThickness = 2,
@@ -7869,9 +8730,8 @@ local function TXR_TagEngineInit()
     mk("UIPadding", teGrid, { PaddingTop = UDim.new(0, 5), PaddingLeft = UDim.new(0, 5), PaddingRight = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5) })
     mk("UIGridLayout", teGrid, { CellSize = UDim2.new(0.5, -5, 0, 36), CellPadding = UDim2.fromOffset(6, 6), SortOrder = Enum.SortOrder.LayoutOrder })
 
-    -- section 5: duration
     local secDur = section(72, 5)
-    smallLabel(secDur, "DURATION (TIMER - TARGET KO DIKHEGA):", 0)
+    smallLabel(secDur, "DURATION (VISIBLE TO TARGET):", 0)
     local durScroll = mk("ScrollingFrame", secDur, {
         Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, 16), BackgroundTransparency = 1,
         ScrollBarThickness = 0, ScrollingDirection = Enum.ScrollingDirection.X,
@@ -7889,15 +8749,20 @@ local function TXR_TagEngineInit()
         TextColor3 = GOLD, Font = Enum.Font.GothamBlack, TextSize = 9.0, ZIndex = 424
     })
 
-    -- section 6: actions
-    local secAct = section(30, 6)
+    local secPartner = section(30, 6)
+    local partnerBox = mk("TextBox", secPartner, {
+        Size = UDim2.new(1, 0, 0, 26), BackgroundColor3 = rgb(17, 23, 36), Text = "",
+        PlaceholderText = sc("Couple frame partner username (optional)"), PlaceholderColor3 = Colors.SubText, TextColor3 = Color3.new(1, 1, 1),
+        Font = Enum.Font.GothamBold, TextSize = 9.2, ClearTextOnFocus = false, ZIndex = 424,
+        Corner = UDim.new(0, 8), Stroke = { Color = Colors.PrimaryDark, Thickness = 1, Transparency = 0.45 }
+    })
+    local secAct = section(30, 7)
     local giveBtn = mk("TextButton", secAct, { Size = UDim2.new(0.40, -3, 1, 0), BackgroundColor3 = GOLD, Text = "🎁 " .. sc("GIVE"), TextColor3 = rgb(10, 13, 20), Font = Enum.Font.GothamBlack, TextSize = 10, AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(0, 9) })
     local revokeBtn = mk("TextButton", secAct, { Size = UDim2.new(0.30, -3, 1, 0), Position = UDim2.new(0.40, 3, 0, 0), BackgroundColor3 = rgb(38, 16, 26), Text = "🗑️ " .. sc("TAKE"), TextColor3 = Colors.Danger, Font = Enum.Font.GothamBlack, TextSize = 9.6, AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(0, 9), Stroke = { Color = rgb(110, 36, 52), Thickness = 1, Transparency = 0.3 } })
     local clearBtn = mk("TextButton", secAct, { Size = UDim2.new(0.30, 0, 1, 0), Position = UDim2.new(0.70, 3, 0, 0), BackgroundColor3 = rgb(38, 16, 26), Text = sc("CLEAR ALL"), TextColor3 = Colors.Danger, Font = Enum.Font.GothamBlack, TextSize = 9.0, AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(0, 9), Stroke = { Color = rgb(110, 36, 52), Thickness = 1, Transparency = 0.3 } })
     applySpringHover(giveBtn); applySpringHover(revokeBtn); applySpringHover(clearBtn)
 
-    -- section 7: active list
-    local secActive = mk("Frame", teScroll, { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 7, ZIndex = 422 })
+    local secActive = mk("Frame", teScroll, { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 8, ZIndex = 422 })
     mk("UIListLayout", secActive, { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder })
     local activeHeader = mk("TextLabel", secActive, {
         Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1, Text = sc("ACTIVE ON TARGET:"), TextColor3 = Colors.SubText,
@@ -7916,7 +8781,8 @@ local function TXR_TagEngineInit()
         local tLow = (engineTarget or ""):lower()
         local n = #validTagList(tLow)
         local gr = getGlowRec(tLow)
-        statLbl.Text = string.format("%s @%s  •  %s %d  •  %s %s", sc("TARGET:"), tostring(engineTarget), sc("TAGS:"), n, sc("GLOW:"), gr and GlowPresets[gr.style].name or "OFF")
+        local fr = getFrameRec(tLow)
+        statLbl.Text = string.format("%s @%s  •  %s %d  •  %s %s", sc("TARGET:"), tostring(engineTarget), sc("TAGS:"), n, sc("FRAME:"), fr and FrameDefs[fr.style].name or (gr and GlowPresets[gr.style].name or "NONE"))
     end
 
     local function rebuildActiveList()
@@ -7947,6 +8813,15 @@ local function TXR_TagEngineInit()
                 playSFX("default")
             end)
         end
+        local fr = S.profileFrame[tLow]
+        if fr and fr.style and fr.style > 0 and S.__txFrameDefs[fr.style] and (not fr.exp or fr.exp == 0 or fr.exp > nowSec()) then
+            addRow("🖼 " .. S.__txFrameDefs[fr.style].name, fr, function()
+                local tName = engineTarget
+                applyFrame(tName:lower(), tName, 0, 0, "", lp.DisplayName, "local")
+                sendHidden(string.format("__FRAMESET__:%s|0|0||%d", tName:lower(), lp.UserId))
+                playSFX("default")
+            end)
+        end
         local gr = S.profileGlow[tLow]
         if gr and gr.style and gr.style > 0 and (not gr.exp or gr.exp == 0 or gr.exp > nowSec()) then
             addRow("✨ " .. GlowPresets[gr.style].name, gr, function()
@@ -7967,7 +8842,27 @@ local function TXR_TagEngineInit()
             if c:IsA("GuiObject") then c:Destroy() end
         end
         local tLow = (engineTarget or ""):lower()
-        if engineTab == "GLOW" then
+        if engineTab == "FRAME" then
+            for idx, fd in ipairs(S.__txFrameDefs) do
+                local selected = engineSel and engineSel.kind == "frame" and engineSel.key == idx
+                local cell = mk("TextButton", teGrid, {
+                    BackgroundColor3 = selected and rgb(46, 36, 14) or rgb(16, 22, 34), Text = "", AutoButtonColor = false, LayoutOrder = idx, ZIndex = 424,
+                    Corner = UDim.new(0, 9), Stroke = { Color = selected and GOLD or rgb(40, 48, 66), Thickness = selected and 1.6 or 1, Transparency = selected and 0.05 or 0.3 }
+                })
+                local sw = mk("Frame", cell, { Size = UDim2.fromOffset(26, 26), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 6, 0.5, 0), BackgroundTransparency = 1, ZIndex = 425, Corner = UDim.new(1, 0) })
+                local sst = mk("UIStroke", sw, { Thickness = 2.4, Color = Color3.new(1, 1, 1), ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+                mk("UIGradient", sst, { Color = fd.seq, Rotation = 45 })
+                mk("Frame", sw, { Size = UDim2.fromOffset(8, 8), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Rotation = 45, BackgroundColor3 = fd.c1, BorderSizePixel = 0, ZIndex = 426, Corner = UDim.new(0, 2) })
+                local kindIco = (fd.kind == "ANIME" and "⚡") or (fd.kind == "COUPLE" and "💕") or "🌌"
+                mk("TextLabel", cell, { Size = UDim2.new(1, -40, 1, 0), Position = UDim2.fromOffset(38, 0), BackgroundTransparency = 1, Text = kindIco .. " " .. tostring(idx) .. ". " .. sc(fd.name), TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 7.6, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 425 })
+                applySpringHover(cell)
+                cell.MouseButton1Click:Connect(function()
+                    engineSel = { kind = "frame", key = idx }
+                    rebuildGrid()
+                    playSFX("default")
+                end)
+            end
+        elseif engineTab == "GLOW" then
             for idx, gp in ipairs(GlowPresets) do
                 local selected = engineSel and engineSel.kind == "glow" and engineSel.key == idx
                 local cell = mk("TextButton", teGrid, {
@@ -8020,9 +8915,9 @@ local function TXR_TagEngineInit()
     end
     for i, def in ipairs(tabDefs) do
         local b = mk("TextButton", secTabs, {
-            Size = UDim2.new(0.25, -3, 1, 0), Position = UDim2.new((i - 1) * 0.25, (i == 1) and 0 or 2, 0, 0),
+            Size = UDim2.new(0.2, -3, 1, 0), Position = UDim2.new((i - 1) * 0.2, (i == 1) and 0 or 2, 0, 0),
             BackgroundColor3 = rgb(17, 22, 34), Text = def[2], TextColor3 = Colors.SubText, Font = Enum.Font.GothamBlack,
-            TextSize = 8.6, AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(1, 0), Stroke = { Color = rgb(40, 48, 66), Thickness = 0.9, Transparency = 0.35 }
+            TextSize = 8.2, AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(1, 0), Stroke = { Color = rgb(40, 48, 66), Thickness = 0.9, Transparency = 0.35 }
         })
         applySpringHover(b)
         tabBtns[def[1]] = b
@@ -8132,15 +9027,39 @@ local function TXR_TagEngineInit()
         if not tName or tName == "" then flashBtn(giveBtn, sc("NO TARGET")); return end
         if not engineSel then flashBtn(giveBtn, sc("PICK ITEM")); return end
         local tLow = tName:lower()
+        local isSelfGift = (tLow == myLowName)
         local exp = (engineDur > 0) and math.floor(nowSec() + engineDur) or 0
+        if engineSel.kind == "frame" then
+            local fd = S.__txFrameDefs[engineSel.key]
+            local partner = resolveName(partnerBox.Text)
+            applyFrame(tLow, tName, engineSel.key, exp, partner or "", lp.DisplayName, "local")
+            sendHidden(string.format("__FRAMESET__:%s|%d|%d|%s|%d", tLow, engineSel.key, exp, partner or "", lp.UserId))
+            if partner and fd and fd.kind == "COUPLE" and partner:lower() ~= tLow then
+                local pl = partner:lower()
+                applyFrame(pl, partner, engineSel.key, exp, tName, lp.DisplayName, "local")
+                sendHidden(string.format("__FRAMESET__:%s|%d|%d|%s|%d", pl, engineSel.key, exp, tName, lp.UserId))
+            end
+            if not isSelfGift then
+                sysNote(string.format("✅ Granted '%s' Profile Frame to @%s — %s", fd.name, tName, (exp == 0) and "PERMANENT" or ("Valid until " .. fmtStamp(exp))))
+            end
+            flashBtn(giveBtn, "✓ " .. sc("SENT"))
+            playSFX("reaction")
+            rebuildGrid()
+            rebuildActiveList()
+            return
+        end
         if engineSel.kind == "tag" then
             applyGrant(tLow, tName, engineSel.key, exp, lp.DisplayName, "local")
             sendHidden(string.format("__TAGGIVE__:%s|%s|%d|%d", tLow, engineSel.key, exp, lp.UserId))
-            sysNote(string.format("✅ @%s ko %s tag diya — %s", tName, tostring(BadgePresets[engineSel.key].Title), (exp == 0) and "PERMANENT" or ("valid till " .. fmtStamp(exp))))
+            if not isSelfGift then
+                sysNote(string.format("✅ Granted %s tag to @%s — %s", tostring(BadgePresets[engineSel.key].Title), tName, (exp == 0) and "PERMANENT" or ("Valid until " .. fmtStamp(exp))))
+            end
         else
             applyGlow(tLow, tName, engineSel.key, exp, lp.DisplayName, "local")
             sendHidden(string.format("__GLOWSET__:%s|%d|%d|%d", tLow, engineSel.key, exp, lp.UserId))
-            sysNote(string.format("✅ @%s ko '%s' premium glow diya — %s", tName, GlowPresets[engineSel.key].name, (exp == 0) and "PERMANENT" or ("valid till " .. fmtStamp(exp))))
+            if not isSelfGift then
+                sysNote(string.format("✅ Granted '%s' Premium Glow to @%s — %s", GlowPresets[engineSel.key].name, tName, (exp == 0) and "PERMANENT" or ("Valid until " .. fmtStamp(exp))))
+            end
         end
         flashBtn(giveBtn, "✓ " .. sc("SENT"))
         playSFX("reaction")
@@ -8154,6 +9073,15 @@ local function TXR_TagEngineInit()
         if not tName or tName == "" then return end
         local tLow = tName:lower()
         if not engineSel then flashBtn(revokeBtn, sc("PICK ITEM")); return end
+        if engineSel.kind == "frame" then
+            applyFrame(tLow, tName, 0, 0, "", lp.DisplayName, "local")
+            sendHidden(string.format("__FRAMESET__:%s|0|0||%d", tLow, lp.UserId))
+            flashBtn(revokeBtn, "✓ " .. sc("TAKEN"))
+            playSFX("default")
+            rebuildGrid()
+            rebuildActiveList()
+            return
+        end
         if engineSel.kind == "tag" then
             applyRevoke(tLow, engineSel.key, lp.DisplayName, "local")
             sendHidden(string.format("__TAGTAKE__:%s|%s|%d", tLow, engineSel.key, lp.UserId))
@@ -8176,6 +9104,8 @@ local function TXR_TagEngineInit()
         sendHidden(string.format("__TAGTAKE__:%s|ALL|%d", tLow, lp.UserId))
         applyGlow(tLow, tName, 0, 0, lp.DisplayName, "local")
         sendHidden(string.format("__GLOWSET__:%s|0|0|%d", tLow, lp.UserId))
+        applyFrame(tLow, tName, 0, 0, "", lp.DisplayName, "local")
+        sendHidden(string.format("__FRAMESET__:%s|0|0||%d", tLow, lp.UserId))
         flashBtn(clearBtn, "✓ " .. sc("CLEARED"))
         playSFX("default")
         rebuildGrid()
@@ -8229,7 +9159,7 @@ local function TXR_TagEngineInit()
 
     local glowPill = mk("Frame", UI.pmGlowHost, {
         Size = UDim2.fromOffset(222, 16), AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -3),
-        BackgroundColor3 = rgb(8, 10, 16), BackgroundTransparency = 0.12, ZIndex = 335, Corner = UDim.new(1, 0)
+        BackgroundColor3 = rgb(8, 10, 16), BackgroundTransparency = 0.12, ZIndex = 335, Corner = UDim.new(1, 0), Visible = false
     })
     local glowPillStroke = mk("UIStroke", glowPill, { Thickness = 1, Color = Color3.new(1, 1, 1), Transparency = 0.2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
     local glowPillGrad = mk("UIGradient", glowPillStroke, {})
@@ -8301,6 +9231,7 @@ local function TXR_TagEngineInit()
             local show = isVerifiedOwner(myLowName, lp.UserId) and not isAI and lowU ~= "system"
             UI.pmTagBtn.Visible = show
             UI.pmGlowBtn.Visible = show
+            if S.__txApplyFrame then S.__txApplyFrame(lowU) end
             applyProfileGlowFor(lowU)
         end)
     end
@@ -8440,16 +9371,18 @@ local function TXR_TagEngineInit()
                     if rec.style and rec.style > 0 and rec.exp and rec.exp ~= 0 and rec.exp <= now then
                         S.profileGlow[low] = nil
                         glowExpired = true
-                        if low == myLowName then
-                            notifyIsland("TAGLOST", "✨ Tumhara Premium Glow expire ho gaya")
+                        if low == myLowName and not isVerifiedOwner(myLowName, lp.UserId) then
+                            notifyIsland("TAGLOST", "✨ Your Premium Profile Glow has expired")
                         end
                     end
                 end
                 if meChanged then
                     saveProfilePrefs()
                     broadcastMyProfileStyle()
-                    notifyIsland("TAGLOST", "⌛ " .. table.concat(lostNames, ", ") .. " tag expire ho gaya")
-                    sysNote("⌛ Tumhara timed tag expire ho gaya: " .. table.concat(lostNames, ", "))
+                    if not isVerifiedOwner(myLowName, lp.UserId) then
+                        notifyIsland("TAGLOST", "⌛ " .. table.concat(lostNames, ", ") .. " tag has expired")
+                        sysNote("⌛ Your timed tag has expired: " .. table.concat(lostNames, ", "))
+                    end
                 end
                 if meChanged or glowExpired then
                     saveEngineDB()
