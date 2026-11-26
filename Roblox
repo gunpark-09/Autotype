@@ -7203,6 +7203,1287 @@ local function checkAndTriggerDynamicIslandPacket(msgStr, rawUserField, isReplay
     return true
 end
 
+
+-- =========================================================
+-- 🏷️ TXR TAG ENGINE V2 + PREMIUM PROFILE GLOW  (ADD-ON BLOCK)
+-- PASTE THIS WHOLE BLOCK ONCE, RIGHT BEFORE THIS LINE OF YOUR SCRIPT:
+--     task.spawn(function()
+--         while _G.TXR_IsPolling and (_G.TXR_ChatInstanceID == currentExecutionID) and UI.gui and UI.gui.Parent do
+-- (i.e. right AFTER the function checkAndTriggerDynamicIslandPacket ... end)
+-- Nothing else in your script is edited or removed.
+-- =========================================================
+do
+local function TXR_TagEngineInit()
+    local myLowName = lp.Name:lower()
+    local ENGINE_FILE = "TXR_TagEngine_DB_V1_" .. tostring(lp.UserId) .. ".json"
+    local GOLD = rgb(255, 215, 55)
+
+    S.grantedTags = S.grantedTags or {}
+    S.profileGlow = S.profileGlow or {}
+    S.activeFxList = S.activeFxList or {}
+    S.__txModalTimers = {}
+    S.__txEngineTimers = {}
+    local seenPackets = {}
+    local firstBatchSeen = false
+    local origRankKey = getRankExclusiveTagKey
+
+    -- ---------- time helpers ----------
+    local function nowSec()
+        local ok, t = pcall(function() return workspace:GetServerTimeNow() end)
+        if ok and type(t) == "number" then return math.floor(t) end
+        return os.time()
+    end
+    local function fmtDur(sec)
+        sec = math.max(0, math.floor(sec))
+        local d = math.floor(sec / 86400)
+        local h = math.floor((sec % 86400) / 3600)
+        local mi = math.floor((sec % 3600) / 60)
+        local s = sec % 60
+        if d > 0 then return string.format("%dd %dh", d, h) end
+        if h > 0 then return string.format("%dh %dm", h, mi) end
+        if mi > 0 then return string.format("%dm %02ds", mi, s) end
+        return string.format("%ds", s)
+    end
+    local function fmtRemain(exp)
+        if not exp or exp == 0 then return "∞ " .. sc("PERMANENT") end
+        return "⏳ " .. fmtDur(exp - nowSec())
+    end
+    local function fmtStamp(exp)
+        if not exp or exp == 0 then return "never" end
+        return os.date("%d %b %H:%M", exp)
+    end
+
+    -- ---------- new tag presets (girls + troll/male) ----------
+    BadgePresets["POOKIE"]    = { Title = "🎀 " .. sc("POOKIE"), Speed = 1.1, Fx = "float", Colors = { csk(0, rgb(255,182,213)), csk(0.5, rgb(255,230,240)), csk(1, rgb(255,160,200)) } }
+    BadgePresets["GIRLYPOP"]  = { Title = "💖 " .. sc("GIRLY POP"), Speed = 1.2, Fx = "pulse", Colors = { csk(0, rgb(255,105,180)), csk(0.5, rgb(195,145,255)), csk(1, rgb(255,105,180)) } }
+    BadgePresets["DIVA"]      = { Title = "👑 " .. sc("DIVA"), Speed = 1.2, Fx = "heartbeat", Colors = { csk(0, rgb(255,60,170)), csk(0.35, rgb(255,208,95)), csk(0.7, rgb(200,80,255)), csk(1, rgb(255,60,170)) } }
+    BadgePresets["BADDIE"]    = { Title = "🔥 " .. sc("BADDIE"), Speed = 1.3, Fx = "flash", Colors = { csk(0, rgb(255,40,125)), csk(0.5, rgb(175,45,255)), csk(1, rgb(255,40,125)) } }
+    BadgePresets["FINESHYT"]  = { Title = "💅 " .. sc("FINESHYT"), Speed = 1.15, Fx = "float", Colors = { csk(0, rgb(255,185,165)), csk(0.35, rgb(255,238,205)), csk(0.7, rgb(255,115,195)), csk(1, rgb(255,185,165)) } }
+
+    BadgePresets["CHAKKA"]    = { Title = sc("CHAKKA"), Speed = 1.4, Fx = "wobble", Colors = { csk(0, rgb(255,60,90)), csk(0.2, rgb(255,200,50)), csk(0.4, rgb(70,235,120)), csk(0.6, rgb(60,190,255)), csk(0.8, rgb(190,90,255)), csk(1, rgb(255,60,90)) } }
+    BadgePresets["SIDMAA"]    = { Title = sc("SID MAA"), Speed = 1.2, Fx = "heartbeat", Colors = { csk(0, rgb(185,255,70)), csk(0.5, rgb(255,120,40)), csk(1, rgb(185,255,70)) } }
+    BadgePresets["MAA"]       = { Title = sc("MAA"), Speed = 1.1, Fx = "shake", Colors = { csk(0, rgb(255,70,70)), csk(0.5, rgb(255,205,90)), csk(1, rgb(255,70,70)) } }
+    BadgePresets["BHAI"]      = { Title = sc("BHAI"), Speed = 1.2, Fx = "pulse", Colors = { csk(0, rgb(60,220,130)), csk(0.5, rgb(50,170,255)), csk(1, rgb(60,220,130)) } }
+    BadgePresets["BHEN"]      = { Title = sc("BHEN"), Speed = 1.1, Fx = "float", Colors = { csk(0, rgb(255,140,200)), csk(0.5, rgb(255,235,245)), csk(1, rgb(255,140,200)) } }
+    BadgePresets["EMP"]       = { Title = "⚡ " .. sc("EMP"), Speed = 1.8, Fx = "glitch", Colors = { csk(0, rgb(0,245,255)), csk(0.3, rgb(255,35,75)), csk(0.6, rgb(255,255,255)), csk(1, rgb(0,245,255)) } }
+    BadgePresets["BETA"]      = { Title = sc("BETA"), Speed = 1.1, Fx = "float", Colors = { csk(0, rgb(120,200,255)), csk(0.5, rgb(240,250,255)), csk(1, rgb(120,200,255)) } }
+    BadgePresets["BATMAN"]    = { Title = "🦇 " .. sc("BATMAN"), Speed = 1.0, Fx = "flash", Colors = { csk(0, rgb(255,215,0)), csk(0.5, rgb(120,130,150)), csk(1, rgb(255,215,0)) } }
+
+    local TagTabs = {
+        GIRLS   = { "POOKIE", "GIRLYPOP", "DIVA", "BADDIE", "FINESHYT" },
+        TROLL   = { "CHAKKA", "SIDMAA", "MAA", "BHAI", "BHEN", "EMP", "BETA", "BATMAN" },
+        SPECIAL = { "OWNER", "COMGOD", "CYBERICON", "TITANSTAR", "VIRALKING", "NETWORKACE", "DADDY", "TITAN", "OVERLORD", "PHANTOM", "DEV", "VIP", "GOD", "CYBER", "VOID", "ZENITH", "APEX", "LUCIFER", "SUPREME", "ROYAL", "DEMON" }
+    }
+    local OwnerAllKeys = {}
+    for _, k in ipairs({ "OWNER" }) do table.insert(OwnerAllKeys, k) end
+    for _, k in ipairs(TagTabs.GIRLS) do table.insert(OwnerAllKeys, k) end
+    for _, k in ipairs(TagTabs.TROLL) do table.insert(OwnerAllKeys, k) end
+    for _, k in ipairs(TagTabs.SPECIAL) do if k ~= "OWNER" then table.insert(OwnerAllKeys, k) end end
+
+    -- ---------- 10 premium profile glow presets ----------
+    local function buildSeq(cols)
+        local pts, n = {}, #cols
+        for i = 1, n do table.insert(pts, csk((i - 1) / n, cols[i])) end
+        table.insert(pts, csk(1, cols[1]))
+        return ColorSequence.new(pts)
+    end
+    local function reverseSeq(cols)
+        local r = {}
+        for i = #cols, 1, -1 do table.insert(r, cols[i]) end
+        return buildSeq(r)
+    end
+    local GlowPresets = {
+        { name = "ROYAL AURORA",    c = { rgb(255,215,55), rgb(0,245,255), rgb(165,65,255) }, aura = rgb(255,200,60), speed = 1.0 },
+        { name = "INFERNO",         c = { rgb(255,40,40), rgb(255,150,30), rgb(255,235,90) }, aura = rgb(255,90,30), speed = 1.3 },
+        { name = "GLACIER",         c = { rgb(120,230,255), rgb(235,250,255), rgb(70,140,255) }, aura = rgb(90,200,255), speed = 0.8 },
+        { name = "SAKURA BLOOM",    c = { rgb(255,150,200), rgb(255,235,245), rgb(200,140,255) }, aura = rgb(255,130,190), speed = 0.9 },
+        { name = "EMERALD MATRIX",  c = { rgb(20,255,140), rgb(0,200,200), rgb(190,255,120) }, aura = rgb(30,230,130), speed = 1.1 },
+        { name = "VOID ECLIPSE",    c = { rgb(150,60,255), rgb(35,20,70), rgb(255,60,200) }, aura = rgb(130,50,230), speed = 0.9 },
+        { name = "PLASMA STORM",    c = { rgb(255,40,200), rgb(60,90,255), rgb(0,240,255) }, aura = rgb(170,60,255), speed = 1.5 },
+        { name = "SOLAR FLARE",     c = { rgb(255,120,20), rgb(255,220,80), rgb(255,255,235) }, aura = rgb(255,160,40), speed = 1.2 },
+        { name = "DIAMOND PRISM",   c = { rgb(255,140,170), rgb(255,230,130), rgb(120,255,200), rgb(130,170,255) }, aura = rgb(200,190,255), speed = 1.0 },
+        { name = "OBSIDIAN CHROME", c = { rgb(235,240,250), rgb(100,112,135), rgb(255,255,255) }, aura = rgb(180,195,220), speed = 0.8 }
+    }
+    for _, gp in ipairs(GlowPresets) do
+        gp.seq = buildSeq(gp.c)
+        gp.seq2 = reverseSeq(gp.c)
+        gp.spark = gp.c[1]
+    end
+
+    -- ---------- broadcast styles for notifications ----------
+    BROADCAST_STYLES.TAGGIFT = {
+        badge = sc("TAG GIFT") .. "  •  " .. sc("NEW"), pillTxt = "● TAG GIFT", accent = rgb(255,120,200),
+        bgTintA = rgb(58,16,44), bgTintB = rgb(8,10,16),
+        colors = { csk(0, rgb(255,110,190)), csk(0.5, rgb(255,215,90)), csk(1, rgb(255,110,190)) }
+    }
+    BROADCAST_STYLES.TAGLOST = {
+        badge = sc("TAG UPDATE") .. "  •  " .. sc("INFO"), pillTxt = "● TAG UPDATE", accent = rgb(255,95,95),
+        bgTintA = rgb(58,14,20), bgTintB = rgb(8,10,16),
+        colors = { csk(0, rgb(255,70,90)), csk(0.5, rgb(255,170,60)), csk(1, rgb(255,70,90)) }
+    }
+    BROADCAST_STYLES.GLOWGIFT = {
+        badge = sc("PREMIUM GLOW") .. "  •  " .. sc("NEW"), pillTxt = "● PREMIUM GLOW", accent = rgb(190,130,255),
+        bgTintA = rgb(36,18,64), bgTintB = rgb(8,10,16),
+        colors = { csk(0, rgb(190,120,255)), csk(0.5, rgb(0,245,255)), csk(1, rgb(190,120,255)) }
+    }
+
+    -- ---------- data helpers ----------
+    local function isTagValid(low, key)
+        local map = S.grantedTags[low]
+        local rec = map and map[key]
+        if not rec then return false end
+        if rec.exp and rec.exp ~= 0 and rec.exp <= nowSec() then return false end
+        return true
+    end
+    local function validTagList(low)
+        local out = {}
+        local map = S.grantedTags[low]
+        if map then
+            for key, rec in pairs(map) do
+                if isTagValid(low, key) then table.insert(out, { key = key, rec = rec }) end
+            end
+        end
+        table.sort(out, function(a, b) return (a.rec.t or 0) > (b.rec.t or 0) end)
+        return out
+    end
+    local function getGlowRec(low)
+        if not low then return nil end
+        local rec = S.profileGlow[low]
+        if rec and rec.style == 0 then return nil end
+        if rec and rec.style and rec.style > 0 and (not rec.exp or rec.exp == 0 or rec.exp > nowSec()) then return rec end
+        if isVerifiedOwner(low) then return { style = 1, exp = 0, by = "OWNER" } end
+        return nil
+    end
+
+    -- ---------- persistence ----------
+    local function saveEngineDB()
+        pcall(function()
+            S.writeF(ENGINE_FILE, Svc.Http:JSONEncode({
+                granted = S.grantedTags, glow = S.profileGlow, pick = S.currentOwnerBadge
+            }))
+        end)
+    end
+
+    local origSave = saveProfilePrefs
+    saveProfilePrefs = function(...)
+        origSave(...)
+        saveEngineDB()
+    end
+
+    local function sendHidden(msg)
+        task.spawn(function()
+            if not S.req then return end
+            pcall(function()
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = msg, jobId = game.JobId, hidden = true })
+                })
+            end)
+        end)
+    end
+
+    local origBroadcast = broadcastMyProfileStyle
+    broadcastMyProfileStyle = function(...)
+        origBroadcast(...)
+        if #validTagList(myLowName) > 0 then
+            sendHidden("__TAGPICK__:" .. tostring(S.currentOwnerBadge or "NONE") .. "|")
+        end
+    end
+
+    -- load saved engine data
+    pcall(function()
+        if S.isF(ENGINE_FILE) then
+            local raw = S.readF(ENGINE_FILE)
+            local dec = raw and Svc.Http:JSONDecode(raw)
+            if type(dec) == "table" then
+                if type(dec.granted) == "table" then
+                    for low, map in pairs(dec.granted) do
+                        if type(map) == "table" then
+                            S.grantedTags[low] = {}
+                            for key, rec in pairs(map) do
+                                if type(rec) == "table" and BadgePresets[key] and (not rec.exp or rec.exp == 0 or rec.exp > nowSec()) then
+                                    S.grantedTags[low][key] = rec
+                                end
+                            end
+                        end
+                    end
+                end
+                if type(dec.glow) == "table" then
+                    for low, rec in pairs(dec.glow) do
+                        if type(rec) == "table" and rec.style then
+                            if rec.style == 0 or (not rec.exp or rec.exp == 0 or rec.exp > nowSec()) then
+                                S.profileGlow[low] = rec
+                            end
+                        end
+                    end
+                end
+                if type(dec.pick) == "string" and dec.pick ~= "NONE" and isTagValid(myLowName, dec.pick) then
+                    S.currentOwnerBadge = dec.pick
+                    S.userCustomBadges[myLowName] = dec.pick
+                end
+            end
+        end
+    end)
+    for low, map in pairs(S.grantedTags) do
+        local first = nil
+        for key, rec in pairs(map) do
+            if isTagValid(low, key) and (not first or (rec.t or 0) > (map[first].t or 0)) then first = key end
+        end
+        if first and low ~= myLowName and not S.userCustomBadges[low] then S.userCustomBadges[low] = first end
+    end
+
+    -- ---------- getRankExclusiveTagKey now also understands gifted tags ----------
+    getRankExclusiveTagKey = function(userLower)
+        if not userLower or userLower == "system" then return nil end
+        local chosen = (userLower == myLowName) and S.currentOwnerBadge or S.userCustomBadges[userLower]
+        if chosen and chosen ~= "NONE" and isTagValid(userLower, chosen) then return chosen end
+        local r = origRankKey(userLower)
+        if r then return r end
+        local list = validTagList(userLower)
+        if list[1] then return list[1].key end
+        return nil
+    end
+
+    -- ---------- unique badge effects ----------
+    local origBuild = buildLiveBadgeElement
+    local function attachFx(host, bData, zBase, tSz)
+        local rec = { host = host, fx = bData.Fx, seed = math.random() * 10 }
+        rec.scale = mk("UIScale", host, { Scale = 1 })
+        rec.stroke = host:FindFirstChildOfClass("UIStroke")
+        if bData.Fx == "glitch" then
+            local title = tostring(bData.Title or "TAG")
+            local function ghost(col)
+                return mk("TextLabel", host, {
+                    Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = title, TextColor3 = col,
+                    TextTransparency = 0.35, Font = Enum.Font.GothamBlack, TextSize = tSz, ZIndex = zBase + 1
+                })
+            end
+            rec.gR = ghost(rgb(255, 40, 70))
+            rec.gC = ghost(rgb(0, 240, 255))
+        end
+        table.insert(S.activeFxList, rec)
+    end
+    buildLiveBadgeElement = function(parentContainer, bData, zBase, customTextSize)
+        local host = origBuild(parentContainer, bData, zBase, customTextSize)
+        if host and bData and bData.Fx then
+            pcall(attachFx, host, bData, zBase or 10, customTextSize or 10.5)
+        end
+        return host
+    end
+
+    -- ---------- notifications ----------
+    local function notifyIsland(styleKey, text)
+        pcall(function() triggerGlobalDynamicIslandBroadcast(styleKey, text) end)
+    end
+    local function sysNote(text)
+        pcall(function()
+            local scope = (S.chatMode == "rank" or S.chatMode == "extra") and "global" or S.chatMode
+            addMessageToFeed("System::" .. BRAND_TITLE, text, nil, false, game.JobId, scope)
+        end)
+    end
+
+    local function refreshAll()
+        if S.refreshTagPermissions then pcall(S.refreshTagPermissions) end
+        if S.rebuildEngineLists then pcall(S.rebuildEngineLists) end
+        if S.__txApplyGlowForOpenProfile then pcall(S.__txApplyGlowForOpenProfile) end
+    end
+
+    -- ---------- core apply functions (mode: "replay" | "local" | "live") ----------
+    local function applyGrant(tLow, tName, key, exp, byName, mode)
+        if not BadgePresets[key] or key == "AICORE" then return end
+        S.grantedTags[tLow] = S.grantedTags[tLow] or {}
+        S.grantedTags[tLow][key] = { exp = exp or 0, t = nowSec(), by = byName or "OWNER" }
+        S.knownUsers[tLow] = S.knownUsers[tLow] or tName or tLow
+        S.userCustomBadges[tLow] = key
+        if tLow == myLowName and mode ~= "replay" then
+            S.currentOwnerBadge = key
+            saveProfilePrefs()
+            broadcastMyProfileStyle()
+            if mode == "live" then
+                local tTitle = BadgePresets[key].Title
+                local remain = (exp == 0) and "PERMANENT" or fmtDur(exp - nowSec())
+                notifyIsland("TAGGIFT", "🎁 " .. tTitle .. "  •  " .. remain)
+                sysNote(string.format("🎁 Owner (%s) ne tumhe %s tag diya — %s (expires: %s). 'Live Tags' menu se select/hide kar sakte ho.", tostring(byName), tTitle, remain, fmtStamp(exp)))
+                playSFX("broadcast")
+            end
+        else
+            saveEngineDB()
+        end
+        refreshAll()
+    end
+
+    local function applyRevoke(tLow, key, byName, mode)
+        local map = S.grantedTags[tLow]
+        local removedKeys = {}
+        if map then
+            for k, _ in pairs(map) do
+                if key == "ALL" or k == key then
+                    table.insert(removedKeys, k)
+                end
+            end
+            for _, k in ipairs(removedKeys) do map[k] = nil end
+        end
+        local cur = S.userCustomBadges[tLow]
+        if cur and (key == "ALL" or cur == key) and not isVerifiedOwner(tLow) then
+            local nxt = validTagList(tLow)[1]
+            S.userCustomBadges[tLow] = nxt and nxt.key or nil
+        end
+        if tLow == myLowName and #removedKeys > 0 and mode ~= "replay" then
+            local curMine = S.currentOwnerBadge
+            local wasRemoved = false
+            for _, k in ipairs(removedKeys) do if k == curMine then wasRemoved = true end end
+            if wasRemoved then
+                local nxt = validTagList(myLowName)[1]
+                S.currentOwnerBadge = nxt and nxt.key or "NONE"
+                S.userCustomBadges[myLowName] = S.currentOwnerBadge
+            end
+            saveProfilePrefs()
+            broadcastMyProfileStyle()
+            if mode == "live" then
+                notifyIsland("TAGLOST", "🗑️ Owner ne tumhara " .. ((key == "ALL") and "tags" or tostring(BadgePresets[key] and BadgePresets[key].Title or key)) .. " hata diya")
+                sysNote("🗑️ Owner ne tumhare gifted tag(s) wapis le liye.")
+            end
+        else
+            saveEngineDB()
+        end
+        refreshAll()
+    end
+
+    local function applyGlow(tLow, tName, style, exp, byName, mode)
+        style = tonumber(style) or 0
+        if style > #GlowPresets then return end
+        if style == 0 then
+            if isVerifiedOwner(tLow) then S.profileGlow[tLow] = { style = 0 } else S.profileGlow[tLow] = nil end
+        else
+            S.profileGlow[tLow] = { style = style, exp = exp or 0, t = nowSec(), by = byName or "OWNER" }
+        end
+        S.knownUsers[tLow] = S.knownUsers[tLow] or tName or tLow
+        saveEngineDB()
+        if tLow == myLowName and mode == "live" then
+            if style > 0 then
+                local remain = (exp == 0) and "PERMANENT" or fmtDur(exp - nowSec())
+                notifyIsland("GLOWGIFT", "✨ " .. GlowPresets[style].name .. " glow  •  " .. remain)
+                sysNote(string.format("✨ Owner ne tumhe Premium Profile Glow '%s' diya — %s (expires: %s). Apna profile kholke dekho!", GlowPresets[style].name, remain, fmtStamp(exp)))
+                playSFX("broadcast")
+            else
+                notifyIsland("TAGLOST", "✨ Tumhara Premium Glow hata diya gaya")
+            end
+        end
+        refreshAll()
+    end
+
+    -- ---------- packet processing (hooked on the existing /messages poll) ----------
+    local function processPacket(m, replay)
+        if type(m) ~= "table" or type(m.msg) ~= "string" or type(m.user) ~= "string" then return end
+        local pKey = tostring(m.id or (tostring(m.time) .. "_" .. m.user .. "_" .. m.msg))
+        if seenPackets[pKey] then return end
+        seenPackets[pKey] = true
+
+        local rawU = m.user:match("^(.-)::(.*)$") or m.user
+        local actorLow = rawU:lower()
+        local fromMe = (actorLow == myLowName)
+        local mode = (replay or fromMe) and "replay" or "live"
+        local msg = m.msg
+
+        local gT, gK, gE, gU = msg:match("^__TAGGIVE__:([^|]+)|([%w_]+)|(%d+)|?(.*)$")
+        if gT then
+            if verifySenderOwnership(actorLow, gU) then
+                applyGrant(gT:lower(), gT, gK, tonumber(gE) or 0, rawU, mode)
+            end
+            return
+        end
+
+        local rT, rK, rU = msg:match("^__TAGTAKE__:([^|]+)|([%w_]+)|?(.*)$")
+        if rT then
+            if verifySenderOwnership(actorLow, rU) then
+                applyRevoke(rT:lower(), rK, rawU, mode)
+            end
+            return
+        end
+
+        local lT, lS, lE, lU = msg:match("^__GLOWSET__:([^|]+)|(%d+)|(%d+)|?(.*)$")
+        if lT then
+            if verifySenderOwnership(actorLow, lU) then
+                applyGlow(lT:lower(), lT, tonumber(lS) or 0, tonumber(lE) or 0, rawU, mode)
+            end
+            return
+        end
+
+        local pk = msg:match("^__TAGPICK__:([%w_]+)|")
+        if pk and not fromMe then
+            if pk == "NONE" or isTagValid(actorLow, pk) then
+                S.userCustomBadges[actorLow] = pk
+            end
+            return
+        end
+    end
+
+    local origReq = S.req
+    if origReq then
+        S.req = function(opts, ...)
+            local res = origReq(opts, ...)
+            pcall(function()
+                if type(opts) == "table" and type(opts.Url) == "string" and opts.Method == "GET"
+                    and opts.Url:find("/messages?since=", 1, true)
+                    and res and (res.StatusCode == 200 or res.Status == 200) and res.Body then
+                    local ok, data = pcall(function() return Svc.Http:JSONDecode(res.Body) end)
+                    if ok and type(data) == "table" then
+                        local replay = not firstBatchSeen
+                        firstBatchSeen = true
+                        local mine = {}
+                        for _, m in ipairs(data) do
+                            if type(m) == "table" and type(m.msg) == "string" then
+                                local p = m.msg:sub(1, 11)
+                                if p == "__TAGGIVE__:" or m.msg:sub(1, 12) == "__TAGGIVE__:" or m.msg:sub(1, 12) == "__TAGTAKE__:"
+                                    or m.msg:sub(1, 12) == "__GLOWSET__:" or m.msg:sub(1, 12) == "__TAGPICK__:" then
+                                    table.insert(mine, m)
+                                end
+                            end
+                        end
+                        if #mine > 0 then
+                            task.delay(0.05, function()
+                                for _, m in ipairs(mine) do pcall(processPacket, m, replay) end
+                            end)
+                        end
+                    end
+                end
+            end)
+            return res
+        end
+    end
+
+    -- =====================================================
+    -- 🏷️ REBUILT "LIVE TAGS" MODAL (with gifted tags + countdowns)
+    -- =====================================================
+    S.rebuildBadgeModalItems = function()
+        pcall(function()
+            for _, ch in ipairs(bsScroll:GetChildren()) do
+                if ch:IsA("GuiObject") then ch:Destroy() end
+            end
+            S.modalSelectionIndicators = {}
+            S.__txModalTimers = {}
+
+            local myLow = myLowName
+            local isOwner = isVerifiedOwner(myLow, lp.UserId)
+
+            local function closeModalSoft()
+                Svc.Tween:Create(bsmScale, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Scale = 0 }):Play()
+                task.delay(0.2, function() S.isBadgeModalOpen = false; UI.badgeSelectorModal.Visible = false end)
+            end
+            local function paintDots()
+                for k, ind in pairs(S.modalSelectionIndicators) do
+                    if ind.dot then ind.dot.BackgroundTransparency = (k == S.currentOwnerBadge) and 0.1 or 1 end
+                end
+            end
+
+            local noneBtn = mk("TextButton", bsScroll, { Size = UDim2.new(0.95, 0, 0, 30), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.40, Text = "", AutoButtonColor = false, ZIndex = 72, Corner = UDim.new(0, 7), Stroke = { Color = rgb(52, 64, 88), Thickness = 0.8, Transparency = 0.55 } })
+            mk("TextLabel", noneBtn, { Size = UDim2.new(1, -30, 1, 0), Position = UDim2.fromOffset(12, 0), BackgroundTransparency = 1, Text = sc("NONE (HIDE TAG)"), TextColor3 = Colors.SubText, Font = Enum.Font.GothamBlack, TextSize = 9.5, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 73 })
+            local noneDot = mk("Frame", noneBtn, { Size = UDim2.fromOffset(8, 8), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), BackgroundColor3 = Colors.OnlineGreen, BackgroundTransparency = (S.currentOwnerBadge == "NONE") and 0.1 or 1, ZIndex = 74, Corner = UDim.new(1, 0) })
+            S.modalSelectionIndicators["NONE"] = { dot = noneDot }
+            applySpringHover(noneBtn)
+            noneBtn.MouseButton1Click:Connect(function()
+                S.currentOwnerBadge = "NONE"
+                S.userCustomBadges[myLow] = "NONE"
+                saveProfilePrefs()
+                broadcastMyProfileStyle()
+                paintDots()
+                closeModalSoft()
+                playSFX("default")
+            end)
+
+            local keys = {}
+            if isOwner then
+                keys = OwnerAllKeys
+            else
+                local seen = {}
+                local rk = origRankKey(myLow)
+                if rk then table.insert(keys, rk); seen[rk] = true end
+                for _, item in ipairs(validTagList(myLow)) do
+                    if not seen[item.key] then table.insert(keys, item.key); seen[item.key] = true end
+                end
+            end
+
+            for _, bKey in ipairs(keys) do
+                local bData = BadgePresets[bKey]
+                if bData then
+                    local bBtn = mk("TextButton", bsScroll, { Size = UDim2.new(0.95, 0, 0, 30), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.40, Text = "", AutoButtonColor = false, ZIndex = 72, Corner = UDim.new(0, 7), Stroke = { Color = Colors.PrimaryDark, Thickness = 0.8, Transparency = 0.65 } })
+                    local badgeHost = buildLiveBadgeElement(bBtn, bData, 73)
+                    badgeHost.AnchorPoint = Vector2.new(0, 0.5); badgeHost.Position = UDim2.new(0, 10, 0.5, 0)
+
+                    local dotIndicator = mk("Frame", bBtn, { Size = UDim2.fromOffset(8, 8), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), BackgroundColor3 = Colors.OnlineGreen, BackgroundTransparency = (S.currentOwnerBadge == bKey) and 0.1 or 1, ZIndex = 74, Corner = UDim.new(1, 0) })
+                    S.modalSelectionIndicators[bKey] = { dot = dotIndicator }
+
+                    local grec = S.grantedTags[myLow] and S.grantedTags[myLow][bKey]
+                    if grec and not isOwner then
+                        local tl = mk("TextLabel", bBtn, { Size = UDim2.fromOffset(72, 14), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -26, 0.5, 0), BackgroundTransparency = 1, Text = fmtRemain(grec.exp), TextColor3 = (grec.exp == 0) and rgb(120, 240, 170) or rgb(255, 205, 90), Font = Enum.Font.GothamBold, TextSize = 8.4, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 74 })
+                        table.insert(S.__txModalTimers, { lbl = tl, exp = grec.exp })
+                    end
+
+                    applySpringHover(bBtn)
+                    bBtn.MouseButton1Click:Connect(function()
+                        local curOwner = isVerifiedOwner(myLow, lp.UserId)
+                        if not curOwner and not isTagValid(myLow, bKey) and origRankKey(myLow) ~= bKey then
+                            S.isBadgeModalOpen = false
+                            UI.badgeSelectorModal.Visible = false
+                            return
+                        end
+                        S.currentOwnerBadge = bKey
+                        S.userCustomBadges[myLow] = bKey
+                        saveProfilePrefs()
+                        broadcastMyProfileStyle()
+                        paintDots()
+                        closeModalSoft()
+                        playSFX("default")
+                    end)
+                end
+            end
+
+            local totalRows = 1 + #keys
+            UI.badgeSelectorModal.Size = UDim2.fromOffset(242, math.clamp(38 + (totalRows * 34), 76, 252))
+        end)
+    end
+
+    local origRefresh = S.refreshTagPermissions
+    S.refreshTagPermissions = function(...)
+        if origRefresh then origRefresh(...) end
+        pcall(function()
+            local isOwner = isVerifiedOwner(myLowName, lp.UserId)
+            if UI.tagEngineDrawerBtn then UI.tagEngineDrawerBtn.Visible = isOwner end
+            if isOwner then
+                UI.moreDrawer.Size = UDim2.fromOffset(176, UI.moreDrawer.Size.Y.Offset + 32)
+            else
+                if #validTagList(myLowName) > 0 and not origRankKey(myLowName) then
+                    UI.liveTagsDrawerBtn.Visible = true
+                    UI.liveTagsDrawerBtn.Text = "  " .. sc("🎁  MY GIFTED TAGS")
+                    UI.liveTagsDrawerBtn.TextColor3 = rgb(255, 130, 200)
+                    if UI.badgeHeaderLbl then
+                        UI.badgeHeaderLbl.Text = sc("YOUR GIFTED TAGS (TIMED)")
+                        UI.badgeHeaderLbl.TextColor3 = rgb(255, 130, 200)
+                    end
+                end
+            end
+        end)
+    end
+
+    -- =====================================================
+    -- 👑 OWNER TAG ENGINE MODAL (TARGET + TAGS + TIMER + GLOW)
+    -- =====================================================
+    local engineTarget = lp.Name
+    local engineTab = "GIRLS"
+    local engineSel = nil
+    local engineDur = 0
+
+    UI.tagEngineModal = mk("Frame", UI.mainFrame, {
+        Size = UDim2.fromOffset(346, 352), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+        BackgroundColor3 = rgb(10, 14, 22), BackgroundTransparency = 0.04, Visible = false, ClipsDescendants = true, ZIndex = 420,
+        Corner = UDim.new(0, 16), Stroke = { Color = GOLD, Thickness = 1.4, Transparency = 0.2 }
+    })
+    local teScale = mk("UIScale", UI.tagEngineModal, { Scale = 0 })
+    mk("UIGradient", UI.tagEngineModal, { Rotation = 140, Color = ColorSequence.new({ csk(0, rgb(30, 22, 12)), csk(0.55, rgb(11, 15, 24)), csk(1, rgb(8, 10, 16)) }) })
+
+    mk("TextLabel", UI.tagEngineModal, {
+        Size = UDim2.new(1, -44, 0, 26), Position = UDim2.fromOffset(12, 5), BackgroundTransparency = 1,
+        Text = "🏷️ " .. sc("OWNER TAG ENGINE") .. "  •  " .. sc("TIMERS"), TextColor3 = GOLD,
+        Font = Enum.Font.GothamBlack, TextSize = 10.2, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 421
+    })
+    local teClose = mk("TextButton", UI.tagEngineModal, {
+        Size = UDim2.fromOffset(22, 22), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, 6),
+        BackgroundColor3 = Colors.Background, Text = "X", TextColor3 = Colors.Danger, Font = Enum.Font.GothamBlack,
+        TextSize = 9, ZIndex = 422, Corner = UDim.new(1, 0)
+    })
+    local teOpen = false
+    local function closeEngine()
+        teOpen = false
+        Svc.Tween:Create(teScale, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Scale = 0 }):Play()
+        task.delay(0.18, function() if not teOpen then UI.tagEngineModal.Visible = false end end)
+    end
+    teClose.MouseButton1Click:Connect(closeEngine)
+
+    local teScroll = mk("ScrollingFrame", UI.tagEngineModal, {
+        Size = UDim2.new(1, -16, 1, -38), Position = UDim2.fromOffset(8, 34), BackgroundTransparency = 1,
+        ScrollBarThickness = 2, ScrollBarImageColor3 = GOLD, AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 421
+    })
+    mk("UIListLayout", teScroll, { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+    mk("UIPadding", teScroll, { PaddingRight = UDim.new(0, 4) })
+
+    local function section(h, order)
+        return mk("Frame", teScroll, { Size = UDim2.new(1, 0, 0, h), BackgroundTransparency = 1, LayoutOrder = order, ZIndex = 422 })
+    end
+    local function smallLabel(parent, txt, y)
+        return mk("TextLabel", parent, {
+            Size = UDim2.new(1, 0, 0, 14), Position = UDim2.fromOffset(0, y or 0), BackgroundTransparency = 1,
+            Text = sc(txt), TextColor3 = Colors.SubText, Font = Enum.Font.GothamBlack, TextSize = 8.4,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 423
+        })
+    end
+    local function flashBtn(btn, txt)
+        if not btn or not btn.Parent then return end
+        local old = btn.Text
+        btn.Text = txt
+        task.delay(1.1, function() if btn and btn.Parent then btn.Text = old end end)
+    end
+
+    -- section 1: target
+    local secTarget = section(74, 1)
+    smallLabel(secTarget, "TARGET PLAYER (TAP OR TYPE USERNAME):", 0)
+    local chipsScroll = mk("ScrollingFrame", secTarget, {
+        Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, 16), BackgroundTransparency = 1,
+        ScrollBarThickness = 0, ScrollingDirection = Enum.ScrollingDirection.X,
+        AutomaticCanvasSize = Enum.AutomaticSize.X, CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 423
+    })
+    mk("UIListLayout", chipsScroll, { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 5) })
+    local tgtBox = mk("TextBox", secTarget, {
+        Size = UDim2.new(0.70, -3, 0, 26), Position = UDim2.fromOffset(0, 44), BackgroundColor3 = rgb(17, 23, 36), Text = "",
+        PlaceholderText = sc("Type any username..."), PlaceholderColor3 = Colors.SubText, TextColor3 = Color3.new(1, 1, 1),
+        Font = Enum.Font.GothamBold, TextSize = 9.6, ClearTextOnFocus = false, ZIndex = 424,
+        Corner = UDim.new(0, 8), Stroke = { Color = Colors.PrimaryDark, Thickness = 1, Transparency = 0.45 }
+    })
+    local tgtSetBtn = mk("TextButton", secTarget, {
+        Size = UDim2.new(0.30, 0, 0, 26), Position = UDim2.new(0.70, 3, 0, 44), BackgroundColor3 = GOLD, Text = sc("SET TARGET"),
+        TextColor3 = rgb(10, 13, 20), Font = Enum.Font.GothamBlack, TextSize = 8.6, AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(0, 8)
+    })
+    applySpringHover(tgtSetBtn)
+
+    -- section 2: stat
+    local secStat = section(22, 2)
+    local statPill = mk("Frame", secStat, { Size = UDim2.fromScale(1, 1), BackgroundColor3 = rgb(15, 20, 32), ZIndex = 423, Corner = UDim.new(0, 8), Stroke = { Color = Colors.PrimaryDark, Thickness = 0.9, Transparency = 0.4 } })
+    local statLbl = mk("TextLabel", statPill, {
+        Size = UDim2.new(1, -14, 1, 0), Position = UDim2.fromOffset(8, 0), BackgroundTransparency = 1, Text = "",
+        TextColor3 = Colors.Primary, Font = Enum.Font.GothamBlack, TextSize = 9.0, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 424
+    })
+
+    -- section 3: tabs
+    local secTabs = section(24, 3)
+    local tabBtns = {}
+    local tabDefs = { { "GIRLS", "💗 GIRLS" }, { "TROLL", "😎 TROLL" }, { "SPECIAL", "⭐ SPECIAL" }, { "GLOW", "✨ GLOW" } }
+    -- section 4: grid
+    local secGrid = section(124, 4)
+    local teGrid = mk("ScrollingFrame", secGrid, {
+        Size = UDim2.fromScale(1, 1), BackgroundColor3 = rgb(12, 17, 27), BackgroundTransparency = 0.2, ScrollBarThickness = 2,
+        ScrollBarImageColor3 = GOLD, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 423,
+        Corner = UDim.new(0, 10), Stroke = { Color = rgb(40, 48, 66), Thickness = 1, Transparency = 0.3 }
+    })
+    mk("UIPadding", teGrid, { PaddingTop = UDim.new(0, 5), PaddingLeft = UDim.new(0, 5), PaddingRight = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5) })
+    mk("UIGridLayout", teGrid, { CellSize = UDim2.new(0.5, -5, 0, 36), CellPadding = UDim2.fromOffset(6, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+
+    -- section 5: duration
+    local secDur = section(72, 5)
+    smallLabel(secDur, "DURATION (TIMER - TARGET KO DIKHEGA):", 0)
+    local durScroll = mk("ScrollingFrame", secDur, {
+        Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, 16), BackgroundTransparency = 1,
+        ScrollBarThickness = 0, ScrollingDirection = Enum.ScrollingDirection.X,
+        AutomaticCanvasSize = Enum.AutomaticSize.X, CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 423
+    })
+    mk("UIListLayout", durScroll, { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 5) })
+    local durCustomBox = mk("TextBox", secDur, {
+        Size = UDim2.new(0.62, -3, 0, 26), Position = UDim2.fromOffset(0, 44), BackgroundColor3 = rgb(17, 23, 36), Text = "",
+        PlaceholderText = sc("Custom minutes (e.g. 45)"), PlaceholderColor3 = Colors.SubText, TextColor3 = Color3.new(1, 1, 1),
+        Font = Enum.Font.GothamBold, TextSize = 9.4, ClearTextOnFocus = false, ZIndex = 424,
+        Corner = UDim.new(0, 8), Stroke = { Color = Colors.PrimaryDark, Thickness = 1, Transparency = 0.45 }
+    })
+    local durInfoLbl = mk("TextLabel", secDur, {
+        Size = UDim2.new(0.38, -3, 0, 26), Position = UDim2.new(0.62, 3, 0, 44), BackgroundTransparency = 1, Text = "",
+        TextColor3 = GOLD, Font = Enum.Font.GothamBlack, TextSize = 9.0, ZIndex = 424
+    })
+
+    -- section 6: actions
+    local secAct = section(30, 6)
+    local giveBtn = mk("TextButton", secAct, { Size = UDim2.new(0.40, -3, 1, 0), BackgroundColor3 = GOLD, Text = "🎁 " .. sc("GIVE"), TextColor3 = rgb(10, 13, 20), Font = Enum.Font.GothamBlack, TextSize = 10, AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(0, 9) })
+    local revokeBtn = mk("TextButton", secAct, { Size = UDim2.new(0.30, -3, 1, 0), Position = UDim2.new(0.40, 3, 0, 0), BackgroundColor3 = rgb(38, 16, 26), Text = "🗑️ " .. sc("TAKE"), TextColor3 = Colors.Danger, Font = Enum.Font.GothamBlack, TextSize = 9.6, AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(0, 9), Stroke = { Color = rgb(110, 36, 52), Thickness = 1, Transparency = 0.3 } })
+    local clearBtn = mk("TextButton", secAct, { Size = UDim2.new(0.30, 0, 1, 0), Position = UDim2.new(0.70, 3, 0, 0), BackgroundColor3 = rgb(38, 16, 26), Text = sc("CLEAR ALL"), TextColor3 = Colors.Danger, Font = Enum.Font.GothamBlack, TextSize = 9.0, AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(0, 9), Stroke = { Color = rgb(110, 36, 52), Thickness = 1, Transparency = 0.3 } })
+    applySpringHover(giveBtn); applySpringHover(revokeBtn); applySpringHover(clearBtn)
+
+    -- section 7: active list
+    local secActive = mk("Frame", teScroll, { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 7, ZIndex = 422 })
+    mk("UIListLayout", secActive, { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder })
+    local activeHeader = mk("TextLabel", secActive, {
+        Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1, Text = sc("ACTIVE ON TARGET:"), TextColor3 = Colors.SubText,
+        Font = Enum.Font.GothamBlack, TextSize = 8.4, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = 0, ZIndex = 423
+    })
+
+    local function resolveName(raw)
+        raw = tostring(raw or ""):gsub("^@", ""):gsub("%s+", "")
+        if raw == "" then return nil end
+        local plr = findPlayerCI(raw)
+        if plr then return plr.Name end
+        return S.knownUsers[raw:lower()] or raw
+    end
+
+    local function updateStat()
+        local tLow = (engineTarget or ""):lower()
+        local n = #validTagList(tLow)
+        local gr = getGlowRec(tLow)
+        statLbl.Text = string.format("%s @%s  •  %s %d  •  %s %s", sc("TARGET:"), tostring(engineTarget), sc("TAGS:"), n, sc("GLOW:"), gr and GlowPresets[gr.style].name or "OFF")
+    end
+
+    local function rebuildActiveList()
+        S.__txEngineTimers = {}
+        for _, c in ipairs(secActive:GetChildren()) do
+            if c:IsA("GuiObject") and c.Name == "ActRow" then c:Destroy() end
+        end
+        local tLow = (engineTarget or ""):lower()
+        local order = 1
+        local function addRow(titleTxt, rec, onRemove)
+            local row = mk("Frame", secActive, {
+                Name = "ActRow", Size = UDim2.new(1, 0, 0, 28), BackgroundColor3 = rgb(16, 22, 34), LayoutOrder = order, ZIndex = 423,
+                Corner = UDim.new(0, 8), Stroke = { Color = rgb(40, 48, 66), Thickness = 0.9, Transparency = 0.3 }
+            })
+            order = order + 1
+            mk("TextLabel", row, { Size = UDim2.new(0.5, 0, 1, 0), Position = UDim2.fromOffset(8, 0), BackgroundTransparency = 1, Text = titleTxt, TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 9.2, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 424 })
+            local tl = mk("TextLabel", row, { Size = UDim2.new(0.34, 0, 1, 0), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -34, 0, 0), BackgroundTransparency = 1, Text = fmtRemain(rec.exp), TextColor3 = (rec.exp == 0) and rgb(120, 240, 170) or rgb(255, 205, 90), Font = Enum.Font.GothamBold, TextSize = 8.8, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 424 })
+            table.insert(S.__txEngineTimers, { lbl = tl, exp = rec.exp })
+            local x = mk("TextButton", row, { Size = UDim2.fromOffset(22, 20), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0), BackgroundColor3 = rgb(38, 16, 26), Text = "X", TextColor3 = Colors.Danger, Font = Enum.Font.GothamBlack, TextSize = 9, AutoButtonColor = false, ZIndex = 425, Corner = UDim.new(1, 0) })
+            x.MouseButton1Click:Connect(onRemove)
+        end
+        for _, item in ipairs(validTagList(tLow)) do
+            local key = item.key
+            addRow(tostring(BadgePresets[key] and BadgePresets[key].Title or key), item.rec, function()
+                local tName = engineTarget
+                applyRevoke(tName:lower(), key, lp.DisplayName, "local")
+                sendHidden(string.format("__TAGTAKE__:%s|%s|%d", tName:lower(), key, lp.UserId))
+                playSFX("default")
+            end)
+        end
+        local gr = S.profileGlow[tLow]
+        if gr and gr.style and gr.style > 0 and (not gr.exp or gr.exp == 0 or gr.exp > nowSec()) then
+            addRow("✨ " .. GlowPresets[gr.style].name, gr, function()
+                local tName = engineTarget
+                applyGlow(tName:lower(), tName, 0, 0, lp.DisplayName, "local")
+                sendHidden(string.format("__GLOWSET__:%s|0|0|%d", tName:lower(), lp.UserId))
+                playSFX("default")
+            end)
+        end
+        updateStat()
+    end
+    S.rebuildEngineLists = function()
+        if UI.tagEngineModal.Visible then rebuildActiveList() end
+    end
+
+    local function rebuildGrid()
+        for _, c in ipairs(teGrid:GetChildren()) do
+            if c:IsA("GuiObject") then c:Destroy() end
+        end
+        local tLow = (engineTarget or ""):lower()
+        if engineTab == "GLOW" then
+            for idx, gp in ipairs(GlowPresets) do
+                local selected = engineSel and engineSel.kind == "glow" and engineSel.key == idx
+                local cell = mk("TextButton", teGrid, {
+                    BackgroundColor3 = selected and rgb(46, 36, 14) or rgb(16, 22, 34), Text = "", AutoButtonColor = false, LayoutOrder = idx, ZIndex = 424,
+                    Corner = UDim.new(0, 9), Stroke = { Color = selected and GOLD or rgb(40, 48, 66), Thickness = selected and 1.6 or 1, Transparency = selected and 0.05 or 0.3 }
+                })
+                local sw = mk("Frame", cell, { Size = UDim2.fromOffset(26, 26), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 6, 0.5, 0), BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 425, Corner = UDim.new(1, 0) })
+                mk("UIGradient", sw, { Color = gp.seq, Rotation = 45 })
+                mk("TextLabel", cell, { Size = UDim2.new(1, -40, 1, 0), Position = UDim2.fromOffset(38, 0), BackgroundTransparency = 1, Text = sc(gp.name), TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 8.4, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 425 })
+                applySpringHover(cell)
+                cell.MouseButton1Click:Connect(function()
+                    engineSel = { kind = "glow", key = idx }
+                    rebuildGrid()
+                    playSFX("default")
+                end)
+            end
+        else
+            local list = TagTabs[engineTab] or {}
+            for idx, key in ipairs(list) do
+                local bData = BadgePresets[key]
+                if bData then
+                    local selected = engineSel and engineSel.kind == "tag" and engineSel.key == key
+                    local has = isTagValid(tLow, key)
+                    local cell = mk("TextButton", teGrid, {
+                        BackgroundColor3 = selected and rgb(46, 36, 14) or rgb(16, 22, 34), Text = "", AutoButtonColor = false, LayoutOrder = idx, ZIndex = 424,
+                        Corner = UDim.new(0, 9), Stroke = { Color = selected and GOLD or rgb(40, 48, 66), Thickness = selected and 1.6 or 1, Transparency = selected and 0.05 or 0.3 }
+                    })
+                    local b = buildLiveBadgeElement(cell, bData, 425)
+                    b.AnchorPoint = Vector2.new(0.5, 0.5); b.Position = UDim2.fromScale(0.5, 0.5)
+                    if has then
+                        mk("TextLabel", cell, { Size = UDim2.fromOffset(14, 14), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -3, 0, 2), BackgroundTransparency = 1, Text = "✓", TextColor3 = Colors.OnlineGreen, Font = Enum.Font.GothamBlack, TextSize = 11, ZIndex = 430 })
+                    end
+                    applySpringHover(cell)
+                    cell.MouseButton1Click:Connect(function()
+                        engineSel = { kind = "tag", key = key }
+                        rebuildGrid()
+                        playSFX("default")
+                    end)
+                end
+            end
+        end
+    end
+
+    local function paintTabs()
+        for key, b in pairs(tabBtns) do
+            local on = (key == engineTab)
+            b.BackgroundColor3 = on and rgb(46, 36, 14) or rgb(17, 22, 34)
+            b.TextColor3 = on and GOLD or Colors.SubText
+        end
+    end
+    for i, def in ipairs(tabDefs) do
+        local b = mk("TextButton", secTabs, {
+            Size = UDim2.new(0.25, -3, 1, 0), Position = UDim2.new((i - 1) * 0.25, (i == 1) and 0 or 2, 0, 0),
+            BackgroundColor3 = rgb(17, 22, 34), Text = def[2], TextColor3 = Colors.SubText, Font = Enum.Font.GothamBlack,
+            TextSize = 8.6, AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(1, 0), Stroke = { Color = rgb(40, 48, 66), Thickness = 0.9, Transparency = 0.35 }
+        })
+        applySpringHover(b)
+        tabBtns[def[1]] = b
+        b.MouseButton1Click:Connect(function()
+            engineTab = def[1]
+            engineSel = nil
+            paintTabs()
+            rebuildGrid()
+            playSFX("default")
+        end)
+    end
+
+    local durChips = {}
+    local durDefs = { { "∞ PERM", 0 }, { "10M", 600 }, { "1H", 3600 }, { "6H", 21600 }, { "1D", 86400 }, { "7D", 604800 }, { "30D", 2592000 } }
+    local function paintDur()
+        for _, d in ipairs(durChips) do
+            local on = (d.sec == engineDur)
+            d.btn.BackgroundColor3 = on and rgb(46, 36, 14) or rgb(18, 24, 36)
+            d.btn.TextColor3 = on and GOLD or Colors.Text
+        end
+        durInfoLbl.Text = (engineDur == 0) and ("∞ " .. sc("PERMANENT")) or ("⏱ " .. fmtDur(engineDur))
+    end
+    for _, def in ipairs(durDefs) do
+        local btn = mk("TextButton", durScroll, {
+            AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 0, 22), BackgroundColor3 = rgb(18, 24, 36),
+            Text = "  " .. def[1] .. "  ", TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 8.8,
+            AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(1, 0), Stroke = { Color = Colors.PrimaryDark, Thickness = 0.9, Transparency = 0.35 }
+        })
+        applySpringHover(btn)
+        table.insert(durChips, { btn = btn, sec = def[2] })
+        btn.MouseButton1Click:Connect(function()
+            engineDur = def[2]
+            durCustomBox.Text = ""
+            paintDur()
+            playSFX("default")
+        end)
+    end
+    durCustomBox.FocusLost:Connect(function()
+        local n = tonumber(durCustomBox.Text)
+        if n and n > 0 then
+            engineDur = math.floor(math.min(n, 525600 * 3) * 60)
+            paintDur()
+        end
+    end)
+
+    local function rebuildTargetChips()
+        for _, c in ipairs(chipsScroll:GetChildren()) do
+            if c:IsA("TextButton") then c:Destroy() end
+        end
+        local seen, list = {}, {}
+        local function push(uName, dName)
+            if not uName or uName == "" or uName:lower() == "system" then return end
+            local low = uName:lower()
+            if not seen[low] and #list < 40 then
+                seen[low] = true
+                table.insert(list, { user = uName, disp = dName or uName })
+            end
+        end
+        push(lp.Name, sc("ME") .. " (" .. lp.DisplayName .. ")")
+        for _, plr in ipairs(Svc.Players:GetPlayers()) do
+            if plr ~= lp then push(plr.Name, plr.DisplayName) end
+        end
+        for uLow, info in pairs(S.activeUsersTable) do
+            local rU = (type(info) == "table" and info.user) or S.knownUsers[uLow] or uLow
+            local rD = (type(info) == "table" and info.disp) or S.knownDispNames[uLow] or rU
+            push(rU, rD)
+        end
+        for uLow, rU in pairs(S.knownUsers) do push(rU, S.knownDispNames[uLow] or rU) end
+        for _, item in ipairs(list) do
+            local isSel = ((engineTarget or ""):lower() == item.user:lower())
+            local chip = mk("TextButton", chipsScroll, {
+                AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 0, 22),
+                BackgroundColor3 = isSel and rgb(46, 36, 14) or rgb(18, 24, 36), Text = "  " .. item.disp .. "  ",
+                TextColor3 = isSel and GOLD or Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 8.8,
+                AutoButtonColor = false, ZIndex = 424, Corner = UDim.new(1, 0),
+                Stroke = { Color = isSel and GOLD or Colors.PrimaryDark, Thickness = 0.9, Transparency = 0.3 }
+            })
+            applySpringHover(chip)
+            chip.MouseButton1Click:Connect(function()
+                engineTarget = item.user
+                rebuildTargetChips()
+                rebuildGrid()
+                rebuildActiveList()
+                playSFX("default")
+            end)
+        end
+    end
+
+    tgtSetBtn.MouseButton1Click:Connect(function()
+        local nm = resolveName(tgtBox.Text)
+        if nm then
+            engineTarget = nm
+            S.knownUsers[nm:lower()] = S.knownUsers[nm:lower()] or nm
+            tgtBox.Text = ""
+            rebuildTargetChips()
+            rebuildGrid()
+            rebuildActiveList()
+            playSFX("reaction")
+        else
+            flashBtn(tgtSetBtn, sc("TYPE NAME"))
+        end
+    end)
+
+    giveBtn.MouseButton1Click:Connect(function()
+        if not isVerifiedOwner(myLowName, lp.UserId) then return end
+        local tName = engineTarget
+        if not tName or tName == "" then flashBtn(giveBtn, sc("NO TARGET")); return end
+        if not engineSel then flashBtn(giveBtn, sc("PICK ITEM")); return end
+        local tLow = tName:lower()
+        local exp = (engineDur > 0) and math.floor(nowSec() + engineDur) or 0
+        if engineSel.kind == "tag" then
+            applyGrant(tLow, tName, engineSel.key, exp, lp.DisplayName, "local")
+            sendHidden(string.format("__TAGGIVE__:%s|%s|%d|%d", tLow, engineSel.key, exp, lp.UserId))
+            sysNote(string.format("✅ @%s ko %s tag diya — %s", tName, tostring(BadgePresets[engineSel.key].Title), (exp == 0) and "PERMANENT" or ("valid till " .. fmtStamp(exp))))
+        else
+            applyGlow(tLow, tName, engineSel.key, exp, lp.DisplayName, "local")
+            sendHidden(string.format("__GLOWSET__:%s|%d|%d|%d", tLow, engineSel.key, exp, lp.UserId))
+            sysNote(string.format("✅ @%s ko '%s' premium glow diya — %s", tName, GlowPresets[engineSel.key].name, (exp == 0) and "PERMANENT" or ("valid till " .. fmtStamp(exp))))
+        end
+        flashBtn(giveBtn, "✓ " .. sc("SENT"))
+        playSFX("reaction")
+        rebuildGrid()
+        rebuildActiveList()
+    end)
+
+    revokeBtn.MouseButton1Click:Connect(function()
+        if not isVerifiedOwner(myLowName, lp.UserId) then return end
+        local tName = engineTarget
+        if not tName or tName == "" then return end
+        local tLow = tName:lower()
+        if not engineSel then flashBtn(revokeBtn, sc("PICK ITEM")); return end
+        if engineSel.kind == "tag" then
+            applyRevoke(tLow, engineSel.key, lp.DisplayName, "local")
+            sendHidden(string.format("__TAGTAKE__:%s|%s|%d", tLow, engineSel.key, lp.UserId))
+        else
+            applyGlow(tLow, tName, 0, 0, lp.DisplayName, "local")
+            sendHidden(string.format("__GLOWSET__:%s|0|0|%d", tLow, lp.UserId))
+        end
+        flashBtn(revokeBtn, "✓ " .. sc("TAKEN"))
+        playSFX("default")
+        rebuildGrid()
+        rebuildActiveList()
+    end)
+
+    clearBtn.MouseButton1Click:Connect(function()
+        if not isVerifiedOwner(myLowName, lp.UserId) then return end
+        local tName = engineTarget
+        if not tName or tName == "" then return end
+        local tLow = tName:lower()
+        applyRevoke(tLow, "ALL", lp.DisplayName, "local")
+        sendHidden(string.format("__TAGTAKE__:%s|ALL|%d", tLow, lp.UserId))
+        applyGlow(tLow, tName, 0, 0, lp.DisplayName, "local")
+        sendHidden(string.format("__GLOWSET__:%s|0|0|%d", tLow, lp.UserId))
+        flashBtn(clearBtn, "✓ " .. sc("CLEARED"))
+        playSFX("default")
+        rebuildGrid()
+        rebuildActiveList()
+    end)
+
+    local function openEngine(targetUser, tab)
+        if not isVerifiedOwner(myLowName, lp.UserId) then return end
+        if targetUser and targetUser ~= "" then engineTarget = targetUser end
+        if tab then engineTab = tab; engineSel = nil end
+        paintTabs(); paintDur()
+        rebuildTargetChips(); rebuildGrid(); rebuildActiveList()
+        teOpen = true
+        UI.tagEngineModal.Visible = true
+        teScale.Scale = 0.85
+        Svc.Tween:Create(teScale, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+        playSFX("default")
+    end
+    S.openTagEngine = openEngine
+
+    UI.tagEngineDrawerBtn = createDrawerOption("🏷️  TAG ENGINE", 6, function() openEngine(nil, nil) end)
+    UI.tagEngineDrawerBtn.TextColor3 = GOLD
+    UI.tagEngineDrawerBtn.Visible = isVerifiedOwner(myLowName, lp.UserId)
+
+    -- =====================================================
+    -- ✨ PREMIUM PROFILE GLOW (10 TYPES) + OWNER BUTTONS IN PROFILE
+    -- =====================================================
+    UI.pmGlowAura = mk("ImageLabel", UI.mainFrame, {
+        Size = UDim2.fromOffset(432, 452), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+        BackgroundTransparency = 1, Image = "rbxassetid://1316045217", ImageColor3 = rgb(255, 200, 60),
+        ImageTransparency = 0.55, Visible = false, ZIndex = 298
+    })
+    local auraScale = mk("UIScale", UI.pmGlowAura, { Scale = 1 })
+
+    UI.pmGlowHost = mk("Frame", UI.mainFrame, {
+        Size = UDim2.fromOffset(342, 362), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+        BackgroundTransparency = 1, Visible = false, ZIndex = 330
+    })
+    local hostScale = mk("UIScale", UI.pmGlowHost, { Scale = 1 })
+    local ring2 = mk("Frame", UI.pmGlowHost, {
+        Size = UDim2.new(1, 10, 1, 10), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+        BackgroundTransparency = 1, ZIndex = 331, Corner = UDim.new(0, 25)
+    })
+    local ring2Stroke = mk("UIStroke", ring2, { Thickness = 5, Color = Color3.new(1, 1, 1), Transparency = 0.72, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+    local ring2Grad = mk("UIGradient", ring2Stroke, {})
+    local ring1 = mk("Frame", UI.pmGlowHost, {
+        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 332, Corner = UDim.new(0, 20)
+    })
+    local ring1Stroke = mk("UIStroke", ring1, { Thickness = 2.6, Color = Color3.new(1, 1, 1), Transparency = 0.02, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+    local ring1Grad = mk("UIGradient", ring1Stroke, {})
+
+    local glowPill = mk("Frame", UI.pmGlowHost, {
+        Size = UDim2.fromOffset(222, 16), AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -3),
+        BackgroundColor3 = rgb(8, 10, 16), BackgroundTransparency = 0.12, ZIndex = 335, Corner = UDim.new(1, 0)
+    })
+    local glowPillStroke = mk("UIStroke", glowPill, { Thickness = 1, Color = Color3.new(1, 1, 1), Transparency = 0.2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+    local glowPillGrad = mk("UIGradient", glowPillStroke, {})
+    local glowPillLbl = mk("TextLabel", glowPill, {
+        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", TextColor3 = Color3.new(1, 1, 1),
+        Font = Enum.Font.GothamBlack, TextSize = 8.4, ZIndex = 336
+    })
+
+    local function applyProfileGlowFor(lowU)
+        local rec = lowU and getGlowRec(lowU) or nil
+        local gp = rec and GlowPresets[rec.style] or nil
+        if rec and gp then
+            S.__txGlowActive = { rec = rec, gp = gp, user = lowU }
+            ring1Grad.Color = gp.seq
+            ring2Grad.Color = gp.seq2
+            glowPillGrad.Color = gp.seq
+            UI.pmGlowAura.ImageColor3 = gp.aura
+            glowPillLbl.TextColor3 = gp.c[1]
+            glowPillLbl.Text = "✦ " .. sc(gp.name) .. "  •  " .. fmtRemain(rec.exp)
+        else
+            S.__txGlowActive = nil
+            UI.pmGlowHost.Visible = false
+            UI.pmGlowAura.Visible = false
+        end
+    end
+    S.__txApplyGlowForOpenProfile = function()
+        if UI.profileModal and UI.profileModal.Visible and S.activeProfileUser then
+            applyProfileGlowFor(S.activeProfileUser:lower())
+        end
+    end
+
+    UI.pmTagBtn = mk("TextButton", UI.profileModal, {
+        Size = UDim2.fromOffset(44, 22), Position = UDim2.fromOffset(108, 104), BackgroundColor3 = rgb(38, 28, 10),
+        Text = "🏷 " .. sc("TAG"), TextColor3 = GOLD, Font = Enum.Font.GothamBlack, TextSize = 8.6, AutoButtonColor = false,
+        Visible = false, ZIndex = 360, Corner = UDim.new(1, 0), Stroke = { Color = GOLD, Thickness = 1, Transparency = 0.25 }
+    })
+    UI.pmGlowBtn = mk("TextButton", UI.profileModal, {
+        Size = UDim2.fromOffset(46, 22), Position = UDim2.fromOffset(156, 104), BackgroundColor3 = rgb(30, 18, 52),
+        Text = "✨ " .. sc("GLOW"), TextColor3 = rgb(200, 140, 255), Font = Enum.Font.GothamBlack, TextSize = 8.4, AutoButtonColor = false,
+        Visible = false, ZIndex = 360, Corner = UDim.new(1, 0), Stroke = { Color = rgb(190, 120, 255), Thickness = 1, Transparency = 0.25 }
+    })
+    applySpringHover(UI.pmTagBtn); applySpringHover(UI.pmGlowBtn)
+
+    local function hideProfileForEngine()
+        UI.profileBackdrop.Visible = false
+        UI.profileModal.Visible = false
+        UI.pmScale.Scale = 0
+        UI.pmGlowHost.Visible = false
+        UI.pmGlowAura.Visible = false
+    end
+    UI.pmTagBtn.MouseButton1Click:Connect(function()
+        local u = S.activeProfileUser
+        if not u then return end
+        hideProfileForEngine()
+        openEngine(u, "GIRLS")
+    end)
+    UI.pmGlowBtn.MouseButton1Click:Connect(function()
+        local u = S.activeProfileUser
+        if not u then return end
+        hideProfileForEngine()
+        openEngine(u, "GLOW")
+    end)
+
+    local origOpenProfile = S.openProfile
+    S.openProfile = function(username, dispName, uId, isAdmin, isAI)
+        origOpenProfile(username, dispName, uId, isAdmin, isAI)
+        pcall(function()
+            local lowU = tostring(username or ""):lower()
+            local show = isVerifiedOwner(myLowName, lp.UserId) and not isAI and lowU ~= "system"
+            UI.pmTagBtn.Visible = show
+            UI.pmGlowBtn.Visible = show
+            applyProfileGlowFor(lowU)
+        end)
+    end
+    local origRefreshOpen = S.refreshCurrentOpenProfile
+    S.refreshCurrentOpenProfile = function(...)
+        if origRefreshOpen then origRefreshOpen(...) end
+        pcall(S.__txApplyGlowForOpenProfile)
+    end
+
+    -- =====================================================
+    -- ⚡ RENDER LOOP: badge FX + glow animation + sparkles
+    -- =====================================================
+    local fxT, sparkAcc = 0, 0
+    local fxConn
+    fxConn = Svc.Run.RenderStepped:Connect(function(dt)
+        if _G.TXR_ChatInstanceID ~= currentExecutionID or not UI.gui.Parent then
+            if fxConn then fxConn:Disconnect() end
+            return
+        end
+        if not UI.mainFrame.Visible then return end
+        fxT = fxT + dt
+        local t = fxT
+
+        for i = #S.activeFxList, 1, -1 do
+            local f = S.activeFxList[i]
+            if not f.host or not f.host.Parent then
+                table.remove(S.activeFxList, i)
+            else
+                local fx, s = f.fx, f.seed
+                if fx == "wobble" then
+                    f.host.Rotation = math.sin(t * 5 + s) * 4.5
+                    f.scale.Scale = 1 + math.sin(t * 3 + s) * 0.03
+                elseif fx == "pulse" then
+                    f.scale.Scale = 1 + (math.sin(t * 4 + s) + 1) * 0.035
+                elseif fx == "heartbeat" then
+                    local b = math.max(0, math.sin(t * 6.5 + s))
+                    f.scale.Scale = 1 + (b ^ 3) * 0.14
+                elseif fx == "float" then
+                    f.host.Rotation = math.sin(t * 2.2 + s) * 2.2
+                    f.scale.Scale = 1 + math.sin(t * 2.2 + s) * 0.025
+                elseif fx == "shake" then
+                    local ph = (t + s) % 3
+                    if ph < 0.55 then f.host.Rotation = math.sin(t * 38) * 3.2 else f.host.Rotation = 0 end
+                elseif fx == "flash" then
+                    if f.stroke then f.stroke.Transparency = 0.05 + math.abs(math.sin(t * 5 + s)) * 0.65 end
+                    f.scale.Scale = 1 + (math.sin(t * 3 + s) + 1) * 0.02
+                elseif fx == "glitch" then
+                    local ph = (t * 0.9 + s) % 2.6
+                    if ph < 0.26 then
+                        f.host.Rotation = (math.random() - 0.5) * 4
+                        if f.gR then f.gR.Position = UDim2.fromOffset(math.random(-3, 0), math.random(-1, 1)) end
+                        if f.gC then f.gC.Position = UDim2.fromOffset(math.random(0, 3), math.random(-1, 1)) end
+                        if f.stroke then f.stroke.Transparency = math.random() * 0.7 end
+                    else
+                        f.host.Rotation = 0
+                        if f.gR then f.gR.Position = UDim2.fromOffset(0, 0) end
+                        if f.gC then f.gC.Position = UDim2.fromOffset(0, 0) end
+                        if f.stroke then f.stroke.Transparency = 0.25 end
+                    end
+                end
+            end
+        end
+
+        local ga = S.__txGlowActive
+        if UI.profileModal and UI.profileModal.Visible and ga then
+            UI.pmGlowHost.Visible = true
+            UI.pmGlowAura.Visible = true
+            local sc0 = UI.pmScale.Scale
+            hostScale.Scale = sc0
+            auraScale.Scale = sc0
+            local sp = ga.gp.speed or 1
+            ring1Grad.Rotation = (t * 70 * sp) % 360
+            ring2Grad.Rotation = -(t * 50 * sp) % 360
+            glowPillGrad.Rotation = (t * 90 * sp) % 360
+            UI.pmGlowAura.ImageTransparency = 0.50 + ((math.sin(t * 2.4 * sp) + 1) / 2) * 0.22
+            ring2Stroke.Transparency = 0.66 + ((math.sin(t * 3 * sp) + 1) / 2) * 0.2
+
+            sparkAcc = sparkAcc + dt
+            if sparkAcc >= 0.14 then
+                sparkAcc = 0
+                local edge = math.random(1, 4)
+                local x, y
+                if edge == 1 then x, y = math.random(8, 92) / 100, 0.02
+                elseif edge == 2 then x, y = math.random(8, 92) / 100, 0.98
+                elseif edge == 3 then x, y = 0.02, math.random(8, 92) / 100
+                else x, y = 0.98, math.random(8, 92) / 100 end
+                local sz = math.random(3, 6)
+                local spark = mk("Frame", UI.pmGlowHost, {
+                    Size = UDim2.fromOffset(sz, sz), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(x, y),
+                    Rotation = 45, BackgroundColor3 = ga.gp.c[math.random(1, #ga.gp.c)], BorderSizePixel = 0, ZIndex = 334
+                })
+                Svc.Tween:Create(spark, TweenInfo.new(1.0, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+                    Position = UDim2.fromScale(x, math.clamp(y + (math.random() - 0.5) * 0.18, 0, 1) - 0.08),
+                    BackgroundTransparency = 1, Size = UDim2.fromOffset(1, 1)
+                }):Play()
+                task.delay(1.05, function() pcall(function() spark:Destroy() end) end)
+            end
+        else
+            if UI.pmGlowHost.Visible then UI.pmGlowHost.Visible = false end
+            if UI.pmGlowAura.Visible then UI.pmGlowAura.Visible = false end
+        end
+    end)
+
+    -- =====================================================
+    -- ⏱ 1-SECOND TICKER: countdown labels + auto-expiry
+    -- =====================================================
+    task.spawn(function()
+        while _G.TXR_ChatInstanceID == currentExecutionID and UI.gui and UI.gui.Parent do
+            task.wait(1)
+            pcall(function()
+                local now = nowSec()
+                local meChanged, lostNames = false, {}
+                for low, map in pairs(S.grantedTags) do
+                    local dead = {}
+                    for key, rec in pairs(map) do
+                        if rec.exp and rec.exp ~= 0 and rec.exp <= now then table.insert(dead, key) end
+                    end
+                    for _, key in ipairs(dead) do
+                        map[key] = nil
+                        if S.userCustomBadges[low] == key then
+                            local nxt = validTagList(low)[1]
+                            S.userCustomBadges[low] = nxt and nxt.key or nil
+                        end
+                        if low == myLowName then
+                            meChanged = true
+                            table.insert(lostNames, tostring(BadgePresets[key] and BadgePresets[key].Title or key))
+                            if S.currentOwnerBadge == key then
+                                local nxt = validTagList(myLowName)[1]
+                                S.currentOwnerBadge = nxt and nxt.key or "NONE"
+                                S.userCustomBadges[myLowName] = S.currentOwnerBadge
+                            end
+                        end
+                    end
+                end
+                local glowExpired = false
+                for low, rec in pairs(S.profileGlow) do
+                    if rec.style and rec.style > 0 and rec.exp and rec.exp ~= 0 and rec.exp <= now then
+                        S.profileGlow[low] = nil
+                        glowExpired = true
+                        if low == myLowName then
+                            notifyIsland("TAGLOST", "✨ Tumhara Premium Glow expire ho gaya")
+                        end
+                    end
+                end
+                if meChanged then
+                    saveProfilePrefs()
+                    broadcastMyProfileStyle()
+                    notifyIsland("TAGLOST", "⌛ " .. table.concat(lostNames, ", ") .. " tag expire ho gaya")
+                    sysNote("⌛ Tumhara timed tag expire ho gaya: " .. table.concat(lostNames, ", "))
+                end
+                if meChanged or glowExpired then
+                    saveEngineDB()
+                    refreshAll()
+                end
+
+                if UI.badgeSelectorModal and UI.badgeSelectorModal.Visible then
+                    for _, tm in ipairs(S.__txModalTimers) do
+                        if tm.lbl and tm.lbl.Parent then tm.lbl.Text = fmtRemain(tm.exp) end
+                    end
+                end
+                if UI.tagEngineModal.Visible then
+                    for _, tm in ipairs(S.__txEngineTimers) do
+                        if tm.lbl and tm.lbl.Parent then tm.lbl.Text = fmtRemain(tm.exp) end
+                    end
+                end
+                local ga = S.__txGlowActive
+                if ga and UI.profileModal.Visible then
+                    glowPillLbl.Text = "✦ " .. sc(ga.gp.name) .. "  •  " .. fmtRemain(ga.rec.exp)
+                end
+            end)
+        end
+    end)
+
+    S.refreshTagPermissions()
+end
+local okInit, errInit = pcall(TXR_TagEngineInit)
+if not okInit then warn("[TXR TagEngine] init error: " .. tostring(errInit)) end
+end
+-- =========================================================
+-- 🏷️ END OF TAG ENGINE ADD-ON BLOCK
+-- =========================================================
+
+
 task.spawn(function()
     while _G.TXR_IsPolling and (_G.TXR_ChatInstanceID == currentExecutionID) and UI.gui and UI.gui.Parent do
         if S.req then
