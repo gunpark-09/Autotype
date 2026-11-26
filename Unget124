@@ -12,7 +12,7 @@ pcall(function()
 end)
 
 -- =========================================================
--- 👑 TXR // RECHAT : CYBER-TITAN APEX (V39.6 ULTRA-REALISTIC & DEVELOPER EDITION) 👑
+-- 👑 TXR // RECHAT : CYBER-TITAN APEX (V40.0 4K ULTRA-HD & FULL SYNC EDITION) 👑
 -- =========================================================
 local currentExecutionID = tick()
 _G.TXR_ChatInstanceID = currentExecutionID
@@ -512,6 +512,7 @@ local S = {
     UPDATE_CAMPAIGN_ID = "EMP_V206_R1",
     CURRENT_SESSION_JOB = tostring(game.JobId),
     GLOBAL_SAVE_FILE = "TXR_GlobalChat_SavedV31.json",
+    DELETED_MSGS_FILE = "TXR_DeletedMsgs_V1.json",
     GLOBAL_PROFILES_DB_FILE = "TXR_GlobalProfiles_DB_V1.json",
     PROFILE_SAVE_FILE = "TXR_ProfilePrefs_PERMANENT_" .. tostring(lp.UserId) .. ".json",
     LEGACY_SAVE_FILES = {
@@ -563,6 +564,9 @@ local S = {
     broadcastGlowCards = {},
     processedServerMessageMap = {},
     recentLocalSentMap = {},
+    deletedMsgIds = {},
+    liveCardByMsgId = {},
+    messageReactionsState = {},
     cardReactionHooks = {},
     seenBroadcastIds = {},
     recentJoinNoticeCooldown = {},
@@ -1607,24 +1611,24 @@ local function createLuxurySpinner(parentFrame, labelText, zBase)
 end
 
 -- =========================================================
--- 🎨 PALETTE & THEMES (+5% GLASSY FROST CALIBRATION)
+-- 🎨 4K ULTRA-HD PALETTE & THEMES (HIGH-CONTRAST GLASSY CALIBRATION)
 -- =========================================================
 local Themes = {
-    [1] = { Primary = rgb(0, 230, 195), PrimaryDark = rgb(0, 150, 130), Accent = rgb(140, 85, 255), ActiveTint = rgb(14, 34, 44) },
-    [2] = { Primary = rgb(255, 65, 100), PrimaryDark = rgb(175, 30, 60), Accent = rgb(255, 150, 40), ActiveTint = rgb(44, 14, 24) },
-    [3] = { Primary = rgb(175, 95, 255), PrimaryDark = rgb(115, 45, 180), Accent = rgb(40, 200, 255), ActiveTint = rgb(32, 16, 48) },
-    [4] = { Primary = rgb(245, 195, 65), PrimaryDark = rgb(175, 125, 25), Accent = rgb(255, 95, 95), ActiveTint = rgb(44, 34, 14) }
+    [1] = { Primary = rgb(0, 240, 205), PrimaryDark = rgb(0, 158, 138), Accent = rgb(148, 92, 255), ActiveTint = rgb(14, 36, 48) },
+    [2] = { Primary = rgb(255, 68, 105), PrimaryDark = rgb(180, 32, 64), Accent = rgb(255, 155, 45), ActiveTint = rgb(46, 14, 25) },
+    [3] = { Primary = rgb(180, 100, 255), PrimaryDark = rgb(120, 48, 185), Accent = rgb(45, 208, 255), ActiveTint = rgb(34, 16, 52) },
+    [4] = { Primary = rgb(255, 205, 68), PrimaryDark = rgb(182, 130, 28), Accent = rgb(255, 98, 98), ActiveTint = rgb(48, 36, 14) }
 }
 
 local Colors = {
-    Background = rgb(9, 13, 20), Surface = rgb(16, 22, 34), SurfaceSelf = rgb(15, 31, 48),
-    SurfaceAI = rgb(20, 24, 46), SurfaceBroadcast = rgb(36, 27, 13), SurfaceHover = rgb(26, 36, 52), ActiveTint = Themes[1].ActiveTint,
-    Primary = Themes[1].Primary, PrimaryDark = Themes[1].PrimaryDark, Danger = rgb(255, 70, 95),
-    Warning = rgb(255, 180, 40), Purple = Themes[1].Accent, Text = rgb(240, 246, 255),
-    SubText = rgb(145, 162, 188), TextDark = rgb(8, 11, 18), MentionGold = rgb(255, 205, 70),
-    MentionBg = rgb(38, 30, 14), OnlineGreen = rgb(45, 235, 135),
-    InstaBlue = rgb(0, 168, 255),
-    ObsidianBase = rgb(10, 13, 19), ObsidianCard = rgb(15, 19, 28)
+    Background = rgb(8, 11, 18), Surface = rgb(15, 21, 33), SurfaceSelf = rgb(14, 30, 48),
+    SurfaceAI = rgb(19, 23, 46), SurfaceBroadcast = rgb(38, 28, 13), SurfaceHover = rgb(28, 39, 58), ActiveTint = Themes[1].ActiveTint,
+    Primary = Themes[1].Primary, PrimaryDark = Themes[1].PrimaryDark, Danger = rgb(255, 72, 98),
+    Warning = rgb(255, 185, 42), Purple = Themes[1].Accent, Text = rgb(244, 249, 255),
+    SubText = rgb(152, 170, 198), TextDark = rgb(7, 10, 16), MentionGold = rgb(255, 210, 75),
+    MentionBg = rgb(40, 31, 14), OnlineGreen = rgb(45, 242, 140),
+    InstaBlue = rgb(0, 172, 255),
+    ObsidianBase = rgb(9, 12, 18), ObsidianCard = rgb(14, 18, 27)
 }
 
 local BadgePresets = {
@@ -1643,7 +1647,7 @@ local BadgePresets = {
     ["GOD"]        = { Title = sc("GOD"), Speed = 1.2, Colors = { csk(0, rgb(255,110,175)), csk(0.25, rgb(255,230,105)), csk(0.5, rgb(95,250,190)), csk(0.75, rgb(100,190,255)), csk(1, rgb(255,110,175)) } },
     ["CYBER"]      = { Title = sc("CYBER"), Speed = 1.2, Colors = { csk(0, rgb(255,20,220)), csk(0.5, rgb(15,240,255)), csk(1, rgb(255,20,220)) } },
     ["VOID"]       = { Title = sc("VOID"), Speed = 0.95, Colors = { csk(0, rgb(90,95,150)), csk(0.5, rgb(185,190,240)), csk(1, rgb(90,95,150)) } },
-    ["ZENITH"]   = { Title = sc("ZENITH"), Speed = 1.15, Colors = { csk(0, rgb(0,245,215)), csk(0.5, rgb(50,180,255)), csk(1, rgb(0,245,215)) } },
+    ["ZENITH"]     = { Title = sc("ZENITH"), Speed = 1.15, Colors = { csk(0, rgb(0,245,215)), csk(0.5, rgb(50,180,255)), csk(1, rgb(0,245,215)) } },
     ["APEX"]       = { Title = sc("APEX"), Speed = 1.2, Colors = { csk(0, rgb(255,45,85)), csk(0.5, rgb(255,160,40)), csk(1, rgb(255,45,85)) } },
     ["LUCIFER"]    = { Title = sc("LUCIFER"), Speed = 1.2, Colors = { csk(0, rgb(255,20,40)), csk(0.5, rgb(255,95,30)), csk(1, rgb(255,20,40)) } },
     ["SUPREME"]    = { Title = sc("SUPREME"), Speed = 1.1, Colors = { csk(0, rgb(255,215,65)), csk(0.5, rgb(255,245,165)), csk(1, rgb(255,215,65)) } },
@@ -1701,6 +1705,89 @@ local function playSFX(soundType)
     end)
 end
 
+-- =========================================================
+-- 🗑️ PERMANENT TOMBSTONE & GLOBAL CHAT SYNC ENGINE (ACROSS REJOINS & ACCOUNTS)
+-- =========================================================
+pcall(function()
+    if S.isF(S.DELETED_MSGS_FILE) then
+        local rawDel = S.readF(S.DELETED_MSGS_FILE)
+        local decDel = rawDel and Svc.Http:JSONDecode(rawDel)
+        if type(decDel) == "table" then
+            for k, v in pairs(decDel) do
+                if v then S.deletedMsgIds[tostring(k)] = true end
+            end
+        end
+    end
+end)
+
+local function saveDeletedMsgsToDisk()
+    pcall(function()
+        S.writeF(S.DELETED_MSGS_FILE, Svc.Http:JSONEncode(S.deletedMsgIds))
+    end)
+end
+
+local function removeGlobalMessageFromDiskById(targetMsgId, fallbackUser, fallbackBody)
+    if not targetMsgId and not fallbackBody then return end
+    local changed = false
+    for i = #_G.TXR_GlobalHistoryCache, 1, -1 do
+        local item = _G.TXR_GlobalHistoryCache[i]
+        local idMatch = targetMsgId and (tostring(item.key) == tostring(targetMsgId) or tostring(item.id) == tostring(targetMsgId))
+        local contentMatch = fallbackUser and fallbackBody and (tostring(item.user):lower():find(tostring(fallbackUser):lower(), 1, true) ~= nil) and (tostring(item.msg) == tostring(fallbackBody))
+        if idMatch or contentMatch then
+            table.remove(_G.TXR_GlobalHistoryCache, i)
+            changed = true
+        end
+    end
+    if changed then
+        pcall(function() S.writeF(S.GLOBAL_SAVE_FILE, Svc.Http:JSONEncode(_G.TXR_GlobalHistoryCache)) end)
+    end
+end
+
+local function purgeMessageEverywhere(msgId, ownerUserLow, rawBodyForFallback, broadcastToServer)
+    local cleanId = tostring(msgId or "")
+    if cleanId ~= "" then
+        S.deletedMsgIds[cleanId] = true
+    end
+    if ownerUserLow and rawBodyForFallback and rawBodyForFallback ~= "" then
+        S.deletedMsgIds["SIG_" .. tostring(ownerUserLow):lower() .. "_" .. tostring(rawBodyForFallback)] = true
+    end
+    saveDeletedMsgsToDisk()
+    removeGlobalMessageFromDiskById(cleanId, ownerUserLow, rawBodyForFallback)
+
+    local cardObj = (cleanId ~= "") and S.liveCardByMsgId[cleanId]
+    if cardObj and cardObj.Parent then
+        S.liveCardByMsgId[cleanId] = nil
+        local innerCard = cardObj:FindFirstChild("CardSurface")
+        local scObj = innerCard and innerCard:FindFirstChildOfClass("UIScale")
+        if scObj then
+            Svc.Tween:Create(scObj, TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.In), { Scale = 0 }):Play()
+            task.delay(0.24, function() if cardObj and cardObj.Parent then cardObj:Destroy() end end)
+        else
+            cardObj:Destroy()
+        end
+    end
+
+    if broadcastToServer and cleanId ~= "" then
+        task.spawn(function()
+            if S.req then
+                pcall(function()
+                    local safeBody = tostring(rawBodyForFallback or ""):gsub("|", " "):sub(1, 80)
+                    S.req({
+                        Url = S.SERVER_URL .. "/send", Method = "POST",
+                        Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                        Body = Svc.Http:JSONEncode({
+                            user = lp.Name .. "::" .. lp.DisplayName,
+                            msg = string.format("__DEL_MSG__:%s|%s|%s", cleanId, tostring(lp.UserId), safeBody),
+                            jobId = game.JobId,
+                            hidden = true
+                        })
+                    })
+                end)
+            end
+        end)
+    end
+end
+
 _G.TXR_GlobalHistoryCache = _G.TXR_GlobalHistoryCache or {}
 pcall(function()
     if #_G.TXR_GlobalHistoryCache == 0 and S.isF(S.GLOBAL_SAVE_FILE) then
@@ -1712,7 +1799,27 @@ pcall(function()
     end
 end)
 
+-- Filter out any previously deleted tombstoned messages from cache immediately on load
+do
+    local cleanedCache = {}
+    for _, item in ipairs(_G.TXR_GlobalHistoryCache) do
+        local k = tostring(item.key or "")
+        local uLow = tostring(item.user or ""):match("^(.-)::") or tostring(item.user or "")
+        local sig = "SIG_" .. uLow:lower() .. "_" .. tostring(item.msg or "")
+        if not S.deletedMsgIds[k] and not S.deletedMsgIds[sig] then
+            table.insert(cleanedCache, item)
+        end
+    end
+    if #cleanedCache ~= #_G.TXR_GlobalHistoryCache then
+        _G.TXR_GlobalHistoryCache = cleanedCache
+        pcall(function() S.writeF(S.GLOBAL_SAVE_FILE, Svc.Http:JSONEncode(_G.TXR_GlobalHistoryCache)) end)
+    end
+end
+
 local function saveGlobalMessageToDisk(userTag, cleanMsg, msgIdKey)
+    local uOnly = tostring(userTag or ""):match("^(.-)::") or tostring(userTag or "")
+    local sigKey = "SIG_" .. uOnly:lower() .. "_" .. tostring(cleanMsg or "")
+    if S.deletedMsgIds[tostring(msgIdKey)] or S.deletedMsgIds[sigKey] then return end
     for _, item in ipairs(_G.TXR_GlobalHistoryCache) do
         if item.key == msgIdKey then return end
     end
@@ -1742,28 +1849,35 @@ local function displayBubble(userName, msg)
 end
 
 -- =========================================================
--- 🏗️ ROOT GUI & MAIN EXECUTIVE ACRYLIC CHASSIS (SMOOTH ROUNDED CORNERS)
+-- 🏗️ ROOT GUI & 4K ULTRA-HD EXECUTIVE ACRYLIC CHASSIS
 -- =========================================================
 UI.gui = mk("ScreenGui", targetGuiParent, { Name = "TXR_OnyxChat_" .. tostring(math.random(100000, 999999)), ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling })
-UI.shadow = mk("ImageLabel", UI.gui, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.4, 0.5), Size = UDim2.new(0, 504, 0, 418), BackgroundTransparency = 1, Image = "rbxassetid://1316045217", ImageColor3 = Color3.new(0, 0, 0), ImageTransparency = 0.24, ZIndex = 1 })
-UI.aura = mk("ImageLabel", UI.gui, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.4, 0.5), Size = UDim2.new(0, 480, 0, 394), BackgroundTransparency = 1, Image = "rbxassetid://1316045217", ImageColor3 = Colors.Primary, ImageTransparency = 0.68, ZIndex = 2 })
+UI.shadow = mk("ImageLabel", UI.gui, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.4, 0.5), Size = UDim2.new(0, 508, 0, 422), BackgroundTransparency = 1, Image = "rbxassetid://1316045217", ImageColor3 = Color3.new(0, 0, 0), ImageTransparency = 0.20, ZIndex = 1 })
+UI.aura = mk("ImageLabel", UI.gui, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.4, 0.5), Size = UDim2.new(0, 484, 0, 398), BackgroundTransparency = 1, Image = "rbxassetid://1316045217", ImageColor3 = Colors.Primary, ImageTransparency = 0.64, ZIndex = 2 })
 UI.auraScale, UI.shadowScale = mk("UIScale", UI.aura), mk("UIScale", UI.shadow)
 
 UI.mainFrame = mk("Frame", UI.gui, {
     AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.4, 0.5), Size = UDim2.new(0, 460, 0, 374),
-    BackgroundColor3 = Colors.Background, BackgroundTransparency = 0.095, ClipsDescendants = true, Active = true, ZIndex = 5,
+    BackgroundColor3 = Colors.Background, BackgroundTransparency = 0.065, ClipsDescendants = true, Active = true, ZIndex = 5,
     Corner = UDim.new(0, 18)
 })
 UI.mainStroke = mk("UIStroke", UI.mainFrame, {
-    Thickness = 1.45, Transparency = 0.18, Color = Colors.Primary,
+    Thickness = 1.55, Transparency = 0.14, Color = Colors.Primary,
     ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 })
 UI.strokeGrad = mk("UIGradient", UI.mainStroke, { Color = ColorSequence.new({ csk(0, Colors.Primary), csk(0.5, Colors.Purple), csk(1, Colors.Primary) }) })
 UI.mainScale = mk("UIScale", UI.mainFrame)
 
+-- 4K Inner Micro-Bezel Rim for Crisp Depth
+local inner4kRim = mk("Frame", UI.mainFrame, {
+    Size = UDim2.new(1, -4, 1, -4), Position = UDim2.fromOffset(2, 2),
+    BackgroundTransparency = 1, ZIndex = 6, Corner = UDim.new(0, 16),
+    Stroke = { Thickness = 0.85, Color = Color3.new(1, 1, 1), Transparency = 0.90 }
+})
+
 UI.topSpecularRim = mk("Frame", UI.mainFrame, {
-    Size = UDim2.new(1, -64, 0, 1.5), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 0),
-    BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.15, BorderSizePixel = 0, ZIndex = 16, Corner = UDim.new(1, 0)
+    Size = UDim2.new(1, -56, 0, 1.8), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 0),
+    BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.08, BorderSizePixel = 0, ZIndex = 16, Corner = UDim.new(1, 0)
 })
 UI.topRimGrad = mk("UIGradient", UI.topSpecularRim, {
     Color = ColorSequence.new({ csk(0, rgb(12, 16, 26)), csk(0.35, Colors.Primary), csk(0.65, Colors.Purple), csk(1, rgb(12, 16, 26)) })
@@ -1774,15 +1888,15 @@ UI.mainFrame:GetPropertyChangedSignal("Position"):Connect(function()
 end)
 
 mk("UIGradient", UI.mainFrame, {
-    Color = ColorSequence.new({ csk(0, rgb(22, 30, 46)), csk(0.5, rgb(13, 18, 29)), csk(1, rgb(9, 13, 21)) }),
-    Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.02), NumberSequenceKeypoint.new(0.5, 0.05), NumberSequenceKeypoint.new(1, 0.03) }),
+    Color = ColorSequence.new({ csk(0, rgb(22, 31, 48)), csk(0.5, rgb(12, 17, 28)), csk(1, rgb(8, 11, 19)) }),
+    Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.01), NumberSequenceKeypoint.new(0.5, 0.04), NumberSequenceKeypoint.new(1, 0.02) }),
     Rotation = 35
 })
 UI.glassSheen = mk("Frame", UI.mainFrame, {
-    Size = UDim2.new(1, 0, 0, 108), BackgroundTransparency = 0.90, BackgroundColor3 = rgb(255, 255, 255),
+    Size = UDim2.new(1, 0, 0, 108), BackgroundTransparency = 0.88, BackgroundColor3 = rgb(255, 255, 255),
     BorderSizePixel = 0, ZIndex = 6, Corner = UDim.new(0, 18)
 })
-mk("UIGradient", UI.glassSheen, { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.28), NumberSequenceKeypoint.new(1, 1) }), Rotation = 90 })
+mk("UIGradient", UI.glassSheen, { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.24), NumberSequenceKeypoint.new(1, 1) }), Rotation = 90 })
 
 -- Matrix Rain
 do
@@ -2129,12 +2243,12 @@ local headerLeftCluster = mk("Frame", UI.header, { Size = UDim2.new(0, 235, 1, 0
 mk("UIListLayout", headerLeftCluster, { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 8) })
 
 UI.headerTitle = mk("TextLabel", headerLeftCluster, { AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.new(0, 0, 0, 24), BackgroundTransparency = 1, Text = BRAND_TITLE, TextColor3 = Colors.Primary, Font = Enum.Font.Michroma, TextSize = 13.5, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 12 })
-crispText(UI.headerTitle, 0.30)
+crispText(UI.headerTitle, 0.25)
 
-UI.liveBadge = mk("TextButton", headerLeftCluster, { Size = UDim2.fromOffset(82, 22), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.26, Text = "", AutoButtonColor = false, ZIndex = 12, Corner = UDim.new(1, 0), Stroke = { Color = Colors.PrimaryDark, Thickness = 1, Transparency = 0.45 } })
+UI.liveBadge = mk("TextButton", headerLeftCluster, { Size = UDim2.fromOffset(82, 22), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.22, Text = "", AutoButtonColor = false, ZIndex = 12, Corner = UDim.new(1, 0), Stroke = { Color = Colors.PrimaryDark, Thickness = 1.1, Transparency = 0.35 } })
 UI.ledDot = mk("Frame", UI.liveBadge, { Size = UDim2.fromOffset(6, 6), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 9, 0.5, 0), BackgroundColor3 = Colors.OnlineGreen, ZIndex = 13, Corner = UDim.new(1, 0) })
 UI.liveText = mk("TextLabel", UI.liveBadge, { Size = UDim2.new(1, -22, 1, 0), Position = UDim2.fromOffset(21, 0), BackgroundTransparency = 1, Text = "1 " .. sc("ACTIVE"), TextColor3 = Colors.Primary, Font = Enum.Font.GothamBlack, TextSize = 9.2, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 13 })
-crispText(UI.liveText, 0.45)
+crispText(UI.liveText, 0.40)
 
 UI.liveBadge.MouseButton1Click:Connect(function()
     refreshRosterUI()
@@ -2149,8 +2263,8 @@ local headerRightCluster = mk("Frame", UI.header, { AnchorPoint = Vector2.new(1,
 mk("UIListLayout", headerRightCluster, { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Right, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 5) })
 
 local function createHeaderBtn(text, onClick, wOverride)
-    local b = mk("TextButton", headerRightCluster, { Size = UDim2.fromOffset(wOverride or 28, 24), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.26, Text = text, TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 9.4, AutoButtonColor = false, ZIndex = 15, Corner = UDim.new(0, 7), Stroke = { Thickness = 1, Color = Colors.PrimaryDark, Transparency = 0.55 } })
-    crispText(b, 0.35); applySpringHover(b)
+    local b = mk("TextButton", headerRightCluster, { Size = UDim2.fromOffset(wOverride or 28, 24), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.22, Text = text, TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 9.4, AutoButtonColor = false, ZIndex = 15, Corner = UDim.new(0, 7), Stroke = { Thickness = 1.05, Color = Colors.PrimaryDark, Transparency = 0.45 } })
+    crispText(b, 0.30); applySpringHover(b)
     b.MouseButton1Click:Connect(function() pcall(onClick) end)
     return b
 end
@@ -2290,24 +2404,24 @@ UI.ghostDrawerBtn = createDrawerOption("👻  GHOST MODE: OFF", 2, function()
         Svc.Tween:Create(UI.shadow, TweenInfo.new(0.35), {ImageTransparency = 0.55}):Play()
         UI.ghostDrawerBtn.Text = "  " .. sc("👻  GHOST MODE: ON")
         UI.ghostDrawerBtn.TextColor3 = Colors.Primary
-        UI.mainStroke.Transparency = 0.18; UI.mainStroke.Thickness = 1.6
+        UI.mainStroke.Transparency = 0.14; UI.mainStroke.Thickness = 1.65
         if UI.badgeSelectorModal then UI.badgeSelectorModal.BackgroundTransparency = 0.48 end
         for _, cardWrap in ipairs(UI.messageFeed:GetChildren()) do
             local inner = cardWrap:FindFirstChild("CardSurface")
             if inner then inner.BackgroundTransparency = 0.55 end
         end
     else
-        Svc.Tween:Create(UI.mainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quart), {BackgroundTransparency = 0.095}):Play()
-        Svc.Tween:Create(UI.glassSheen, TweenInfo.new(0.35), {BackgroundTransparency = 0.90}):Play()
-        Svc.Tween:Create(UI.aura, TweenInfo.new(0.35), {ImageTransparency = 0.68}):Play()
-        Svc.Tween:Create(UI.shadow, TweenInfo.new(0.35), {ImageTransparency = 0.24}):Play()
+        Svc.Tween:Create(UI.mainFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quart), {BackgroundTransparency = 0.065}):Play()
+        Svc.Tween:Create(UI.glassSheen, TweenInfo.new(0.35), {BackgroundTransparency = 0.88}):Play()
+        Svc.Tween:Create(UI.aura, TweenInfo.new(0.35), {ImageTransparency = 0.64}):Play()
+        Svc.Tween:Create(UI.shadow, TweenInfo.new(0.35), {ImageTransparency = 0.20}):Play()
         UI.ghostDrawerBtn.Text = "  " .. sc("👻  GHOST MODE: OFF")
         UI.ghostDrawerBtn.TextColor3 = Colors.Text
-        UI.mainStroke.Transparency = 0.18; UI.mainStroke.Thickness = 1.45
+        UI.mainStroke.Transparency = 0.14; UI.mainStroke.Thickness = 1.55
         if UI.badgeSelectorModal then UI.badgeSelectorModal.BackgroundTransparency = 0.08 end
         for _, cardWrap in ipairs(UI.messageFeed:GetChildren()) do
             local inner = cardWrap:FindFirstChild("CardSurface")
-            if inner then inner.BackgroundTransparency = 0.21 end
+            if inner then inner.BackgroundTransparency = 0.16 end
         end
     end
 end)
@@ -2415,9 +2529,14 @@ S.refreshTagPermissions = function()
     UI.moreDrawer.Size = UDim2.fromOffset(176, 10 + (rowCount * 32))
 end
 
+local function closeActionMenuPopup()
+    if UI.actionMenu then UI.actionMenu.Visible = false end
+    if UI.actionMenuBackdrop then UI.actionMenuBackdrop.Visible = false end
+end
+
 createHeaderBtn("-", function()
     toggleMoreDrawer(false)
-    if UI.actionMenu then UI.actionMenu.Visible = false end
+    closeActionMenuPopup()
     if UI.rosterFrame then UI.rosterFrame.Visible = false end
     if UI.memeFrame then UI.memeFrame.Visible = false end
     if UI.emojiFrame then UI.emojiFrame.Visible = false end
@@ -2448,23 +2567,23 @@ UI.closeBtn = createHeaderBtn("X", function()
     UI.gui:Destroy()
 end, 26)
 UI.closeBtn.TextColor3 = Colors.Danger
-mk("Frame", UI.header, { Size = UDim2.new(1, -24, 0, 1), Position = UDim2.new(0, 12, 1, 0), BorderSizePixel = 0, BackgroundColor3 = rgb(34, 44, 64), BackgroundTransparency = 0.45, ZIndex = 12 })
+mk("Frame", UI.header, { Size = UDim2.new(1, -24, 0, 1), Position = UDim2.new(0, 12, 1, 0), BorderSizePixel = 0, BackgroundColor3 = rgb(38, 50, 72), BackgroundTransparency = 0.35, ZIndex = 12 })
 
 -- =========================================================
 -- 🔀 5-WAY SEGMENTED TABS (SERVER | GLOBAL | DMS | 🏆 RANK | DEVELOPER)
 -- =========================================================
 UI.channelFrame = mk("Frame", UI.mainFrame, { Size = UDim2.new(1, -24, 0, 32), Position = UDim2.new(0, 12, 0, 52), BackgroundTransparency = 1, ZIndex = 8 })
-local tabShell = mk("Frame", UI.channelFrame, { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.27, ZIndex = 9, Corner = UDim.new(0, 10), Stroke = { Thickness = 1, Color = Colors.SurfaceHover, Transparency = 0.35 } })
+local tabShell = mk("Frame", UI.channelFrame, { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.22, ZIndex = 9, Corner = UDim.new(0, 10), Stroke = { Thickness = 1.05, Color = Colors.SurfaceHover, Transparency = 0.28 } })
 UI.tabActiveSlider = mk("Frame", tabShell, { Size = UDim2.new(0.20, -4, 1, -4), Position = UDim2.new(0, 2, 0, 2), BackgroundColor3 = Colors.ActiveTint, ZIndex = 9, Corner = UDim.new(0, 8) })
 mk("UIGradient", UI.tabActiveSlider, { Color = ColorSequence.new({ csk(0, rgb(255, 255, 255)), csk(1, rgb(185, 200, 225)) }), Rotation = 90 })
-UI.tabSliderStroke = mk("UIStroke", UI.tabActiveSlider, { Thickness = 1.05, Color = Colors.PrimaryDark, Transparency = 0.40, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+UI.tabSliderStroke = mk("UIStroke", UI.tabActiveSlider, { Thickness = 1.15, Color = Colors.PrimaryDark, Transparency = 0.30, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
 
 UI.serverBtn   = mk("TextButton", tabShell, { Size = UDim2.new(0.20, 0, 1, 0), Position = UDim2.new(0.00, 0, 0, 0), BackgroundTransparency = 1, Text = sc("SERVER"), TextColor3 = Colors.Primary, Font = Enum.Font.GothamBlack, TextSize = 9.2, AutoButtonColor = false, ZIndex = 10 })
 UI.globalBtn   = mk("TextButton", tabShell, { Size = UDim2.new(0.20, 0, 1, 0), Position = UDim2.new(0.20, 0, 0, 0), BackgroundTransparency = 1, Text = sc("GLOBAL"), TextColor3 = Colors.SubText, Font = Enum.Font.GothamBold, TextSize = 9.2, AutoButtonColor = false, ZIndex = 10 })
 UI.dmTabBtn    = mk("TextButton", tabShell, { Size = UDim2.new(0.20, 0, 1, 0), Position = UDim2.new(0.40, 0, 0, 0), BackgroundTransparency = 1, Text = sc("DMS"), TextColor3 = Colors.SubText, Font = Enum.Font.GothamBold, TextSize = 9.2, AutoButtonColor = false, ZIndex = 10 })
 UI.rankTabBtn  = mk("TextButton", tabShell, { Size = UDim2.new(0.20, 0, 1, 0), Position = UDim2.new(0.60, 0, 0, 0), BackgroundTransparency = 1, Text = "🏆 " .. sc("RANK"), TextColor3 = Colors.SubText, Font = Enum.Font.GothamBold, TextSize = 9.0, AutoButtonColor = false, ZIndex = 10 })
 UI.extraTabBtn = mk("TextButton", tabShell, { Size = UDim2.new(0.20, 0, 1, 0), Position = UDim2.new(0.80, 0, 0, 0), BackgroundTransparency = 1, Text = sc("DEVELOPER"), TextColor3 = Colors.SubText, Font = Enum.Font.GothamBold, TextSize = 8.8, AutoButtonColor = false, ZIndex = 10 })
-crispText(UI.serverBtn, 0.35); crispText(UI.globalBtn, 0.35); crispText(UI.dmTabBtn, 0.35); crispText(UI.rankTabBtn, 0.35); crispText(UI.extraTabBtn, 0.35)
+crispText(UI.serverBtn, 0.30); crispText(UI.globalBtn, 0.30); crispText(UI.dmTabBtn, 0.30); crispText(UI.rankTabBtn, 0.30); crispText(UI.extraTabBtn, 0.30)
 
 UI.dmUnreadPill = mk("Frame", UI.dmTabBtn, { Size = UDim2.fromOffset(15, 15), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -5, 0.5, 0), BackgroundColor3 = Colors.Purple, Visible = false, ZIndex = 12, Corner = UDim.new(1, 0) })
 UI.dmUnreadTxt = mk("TextLabel", UI.dmUnreadPill, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "0", TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 8.5, ZIndex = 13 })
@@ -2481,12 +2600,29 @@ UI.messageFeed:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
     if maxOffset - UI.messageFeed.CanvasPosition.Y < 35 then UI.jumpBottomBtn.Visible = false end
 end)
 
-UI.actionMenu = mk("Frame", UI.mainFrame, { Size = UDim2.fromOffset(225, 32), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.05, Visible = false, ZIndex = 50, Corner = UDim.new(0, 8), Stroke = { Color = Colors.Primary, Thickness = 1.2, Transparency = 0.4 } })
+-- =========================================================
+-- 👆 ONE-CLICK ACTION MENU + OUTSIDE-TAP DISMISS BACKDROP
+-- =========================================================
+UI.actionMenuBackdrop = mk("TextButton", UI.mainFrame, {
+    Name = "ActionMenuBackdrop",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    Text = "",
+    AutoButtonColor = false,
+    Visible = false,
+    ZIndex = 49
+})
+UI.actionMenuBackdrop.MouseButton1Down:Connect(function()
+    closeActionMenuPopup()
+end)
+
+UI.actionMenu = mk("Frame", UI.mainFrame, { Size = UDim2.fromOffset(225, 34), BackgroundColor3 = rgb(13, 18, 29), BackgroundTransparency = 0.04, Visible = false, ZIndex = 50, Corner = UDim.new(0, 10), Stroke = { Color = Colors.Primary, Thickness = 1.3, Transparency = 0.25 } })
 mk("UIListLayout", UI.actionMenu, { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 4) })
 
 local function createActionBtn(text, color, onClick)
-    local b = mk("TextButton", UI.actionMenu, { Size = UDim2.new(0, 40, 0, 22), BackgroundColor3 = Colors.Background, Text = sc(text), TextColor3 = color, Font = Enum.Font.GothamBlack, TextSize = 9.0, AutoButtonColor = false, ZIndex = 51, Corner = UDim.new(0, 5) })
-    b.MouseButton1Click:Connect(function() UI.actionMenu.Visible = false; pcall(onClick) end)
+    local b = mk("TextButton", UI.actionMenu, { Size = UDim2.new(0, 40, 0, 23), BackgroundColor3 = rgb(19, 25, 38), Text = sc(text), TextColor3 = color, Font = Enum.Font.GothamBlack, TextSize = 9.0, AutoButtonColor = false, ZIndex = 51, Corner = UDim.new(0, 6), Stroke = { Color = Colors.SurfaceHover, Thickness = 0.85, Transparency = 0.35 } })
+    applySpringHover(b)
+    b.MouseButton1Click:Connect(function() closeActionMenuPopup(); pcall(onClick) end)
 end
 
 UI.dmHeaderBar = mk("Frame", UI.mainFrame, {
@@ -2573,6 +2709,7 @@ end
 local function switchChatTab(modeStr)
     S.chatMode = modeStr
     toggleMoreDrawer(false)
+    closeActionMenuPopup()
     local targetX = (modeStr == "server") and UDim2.new(0.00, 2, 0, 2)
         or ((modeStr == "global") and UDim2.new(0.20, 2, 0, 2)
         or ((modeStr == "dm") and UDim2.new(0.40, 2, 0, 2)
@@ -5045,6 +5182,7 @@ do
     S.openProfile = function(username, dispName, uId, isAdmin, isAI)
         S.activeProfileUser = username
         toggleMoreDrawer(false)
+        closeActionMenuPopup()
         pSocialListDrawer.Visible = false
         pThemeDrawer.Visible = false
         pMediaStudio.Visible = false
@@ -5201,7 +5339,7 @@ do
 end
 
 -- =========================================================
--- 💬 MESSAGE PIPELINE (STRICT SAME-SERVER SCRIPT USERS + SMART CONTAINED FRAMES)
+-- 💬 MESSAGE PIPELINE (STRICT SAME-SERVER SCRIPT USERS + SMART CONTAINED FRAMES + PERMANENT DELETE & TOGGLE REACTIONS)
 -- =========================================================
 local function updateLiveCounter(username, dispName, packetJobId)
     local lowU = username:lower()
@@ -5263,17 +5401,18 @@ local function closeReactionMenu()
     end
 end
 
-local function broadcastReactionPacket(msgId, emojiStr)
+local function broadcastReactionPacket(msgId, emojiStr, isAdd)
     if not msgId or msgId == "" then return end
     task.spawn(function()
         if S.req then
             pcall(function()
+                local tagPrefix = isAdd and "__REACT__:" or "__UNREACT__:"
                 S.req({
                     Url = S.SERVER_URL .. "/send", Method = "POST",
                     Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
                     Body = Svc.Http:JSONEncode({
                         user = lp.Name .. "::" .. lp.DisplayName,
-                        msg = string.format("__REACT__:%s|%s", tostring(msgId), tostring(emojiStr)),
+                        msg = string.format("%s%s|%s", tagPrefix, tostring(msgId), tostring(emojiStr)),
                         jobId = game.JobId,
                         hidden = true
                     })
@@ -5308,10 +5447,19 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         return
     end
 
+    local msgSyncKey = tostring(explicitMsgId or (actualUsername .. "_" .. displayMsg:sub(1, 24)))
+    local sigCheckKey = "SIG_" .. lowUser .. "_" .. tostring(msg)
+    local sigBodyKey = "SIG_" .. lowUser .. "_" .. tostring(displayMsg)
+    if S.deletedMsgIds[msgSyncKey] or S.deletedMsgIds[sigCheckKey] or S.deletedMsgIds[sigBodyKey] then
+        return
+    end
+
     S.userMsgCounts[lowUser] = (S.userMsgCounts[lowUser] or 0) + 1
 
     local isSelf = (lowUser == lp.Name:lower())
     local isAdminUser = isVerifiedOwner(lowUser)
+    local isLocalOwner = isVerifiedOwner(lp.Name:lower(), lp.UserId)
+    local canDeleteThisMsg = isSelf or (isLocalOwner and not isSystemAI)
     local hasAvatarFrame = (not isSystemAI) and (S.__txGetFrameRec and S.__txGetFrameRec(lowUser) ~= nil)
 
     local hasBroadcastMention = isAdminUser and (string.find(string.lower(displayMsg), "@all", 1, true) or string.find(string.lower(displayMsg), "@here", 1, true))
@@ -5338,13 +5486,12 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         end
     end
 
-    local msgSyncKey = explicitMsgId or (actualUsername .. "_" .. displayMsg:sub(1, 24))
-
     local cardWrapper = mk("Frame", UI.messageFeed, { Size = isAnyMeme and UDim2.new(1, 0, 0, hasAvatarFrame and 164 or 152) or UDim2.new(1, 0, 0, 0), AutomaticSize = isAnyMeme and Enum.AutomaticSize.None or Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 9 })
     cardWrapper:SetAttribute("ChatScope", effectiveScope)
     cardWrapper:SetAttribute("JobId", effectiveJob)
     cardWrapper:SetAttribute("SearchBlob", dispName .. " " .. actualUsername .. " " .. displayMsg .. (privateUserTarget and (" " .. privateUserTarget) or ""))
     cardWrapper.Visible = (effectiveScope == S.chatMode)
+    S.liveCardByMsgId[msgSyncKey] = cardWrapper
 
     local swipeCapsule = mk("Frame", cardWrapper, { Size = UDim2.fromOffset(38, 24), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 4, 0.5, 0), BackgroundColor3 = Colors.ActiveTint, BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 8, Corner = UDim.new(1, 0) })
     local scFill = mk("Frame", swipeCapsule, { Size = UDim2.fromScale(0, 1), BackgroundColor3 = Colors.Primary, BackgroundTransparency = 0.70, BorderSizePixel = 0, ZIndex = 8, Corner = UDim.new(1, 0) })
@@ -5356,10 +5503,10 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         Name = "CardSurface", Size = isAnyMeme and UDim2.new(1, 0, 0, hasAvatarFrame and 164 or 152) or UDim2.new(1, 0, 0, 0),
         AutomaticSize = isAnyMeme and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
         BackgroundColor3 = hasBroadcastMention and Colors.SurfaceBroadcast or (isMentioned and Colors.MentionBg or (isSystemAI and Colors.SurfaceAI or (isSelf and Colors.SurfaceSelf or Colors.Surface))),
-        BackgroundTransparency = S.isGhostMode and 0.55 or 0.21, Text = "", AutoButtonColor = false, ClipsDescendants = false, ZIndex = 10, Corner = UDim.new(0, 11)
+        BackgroundTransparency = S.isGhostMode and 0.55 or 0.16, Text = "", AutoButtonColor = false, ClipsDescendants = false, ZIndex = 10, Corner = UDim.new(0, 11)
     })
     mk("UIGradient", card, { Color = ColorSequence.new({ csk(0, rgb(255, 255, 255)), csk(0.6, rgb(232, 240, 252)), csk(1, rgb(195, 206, 225)) }), Rotation = 25 })
-    mk("Frame", card, { Size = UDim2.new(1, -24, 0, 1), Position = UDim2.new(0, 12, 0, 1), BackgroundColor3 = rgb(255, 255, 255), BackgroundTransparency = 0.88, BorderSizePixel = 0, ZIndex = 11 })
+    mk("Frame", card, { Size = UDim2.new(1, -24, 0, 1), Position = UDim2.new(0, 12, 0, 1), BackgroundColor3 = rgb(255, 255, 255), BackgroundTransparency = 0.86, BorderSizePixel = 0, ZIndex = 11 })
 
     local cardScale = mk("UIScale", card, { Scale = 0.96 })
     Svc.Tween:Create(cardScale, TweenInfo.new(0.26, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
@@ -5383,45 +5530,101 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
     mk("UIPadding", reactionPillContainer, { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
     mk("UIListLayout", reactionPillContainer, { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 4) })
     
-    local function addReactionToCard(emojiStr, fromNetwork)
-        local existing = false
-        for _, child in ipairs(reactionPillContainer:GetChildren()) do
-            if child:IsA("TextButton") and child.Name == "React_" .. emojiStr then existing = true; break end
-        end
-        if not existing then
-            local rBtn = mk("TextButton", reactionPillContainer, { Name = "React_" .. emojiStr, Size = UDim2.fromOffset(18, 18), BackgroundTransparency = 1, Text = emojiStr, Font = Enum.Font.SourceSans, TextSize = 16, ZIndex = 51, AutoButtonColor = false })
-            local rBtnScale = mk("UIScale", rBtn, {Scale = 0})
-            
-            reactionPillContainer.Visible = true
-            playSFX("reaction")
-            Svc.Tween:Create(rBtnScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
-            
-            local rpScale = reactionPillContainer:FindFirstChildOfClass("UIScale") or mk("UIScale", reactionPillContainer)
-            rpScale.Scale = 0.4
-            Svc.Tween:Create(rpScale, TweenInfo.new(0.4, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
+    S.messageReactionsState[msgSyncKey] = S.messageReactionsState[msgSyncKey] or {}
 
-            if not fromNetwork then
-                broadcastReactionPacket(msgSyncKey, emojiStr)
+    local function syncReactionPillRender()
+        local stateMap = S.messageReactionsState[msgSyncKey] or {}
+        local activeEmojis = {}
+        for em, usersMap in pairs(stateMap) do
+            if type(usersMap) == "table" and next(usersMap) ~= nil then
+                activeEmojis[em] = true
             end
+        end
 
-            rBtn.MouseButton1Click:Connect(function()
-                playSFX("default")
-                Svc.Tween:Create(rBtnScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
-                task.delay(0.25, function()
-                    if rBtn and rBtn.Parent then rBtn:Destroy() end
-                    local hasReacts = false
-                    for _, c in ipairs(reactionPillContainer:GetChildren()) do
-                        if c:IsA("TextButton") then hasReacts = true; break end
+        for _, child in ipairs(reactionPillContainer:GetChildren()) do
+            if child:IsA("TextButton") and child.Name:sub(1, 6) == "React_" then
+                local emKey = child.Name:sub(7)
+                if not activeEmojis[emKey] then
+                    child:Destroy()
+                end
+            end
+        end
+
+        local anyVisible = false
+        for emKey, _ in pairs(activeEmojis) do
+            anyVisible = true
+            local existingBtn = reactionPillContainer:FindFirstChild("React_" .. emKey)
+            if not existingBtn then
+                local rBtn = mk("TextButton", reactionPillContainer, { Name = "React_" .. emKey, Size = UDim2.fromOffset(18, 18), BackgroundTransparency = 1, Text = emKey, Font = Enum.Font.SourceSans, TextSize = 16, ZIndex = 51, AutoButtonColor = false })
+                local rBtnScale = mk("UIScale", rBtn, {Scale = 0})
+                Svc.Tween:Create(rBtnScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+
+                rBtn.MouseButton1Click:Connect(function()
+                    playSFX("default")
+                    local mState = S.messageReactionsState[msgSyncKey]
+                    if mState and mState[emKey] then
+                        mState[emKey] = nil
                     end
-                    if not hasReacts then reactionPillContainer.Visible = false end
+                    broadcastReactionPacket(msgSyncKey, emKey, false)
+                    Svc.Tween:Create(rBtnScale, TweenInfo.new(0.20, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
+                    task.delay(0.20, function()
+                        if rBtn and rBtn.Parent then rBtn:Destroy() end
+                        syncReactionPillRender()
+                    end)
                 end)
-            end)
+            end
+        end
+
+        reactionPillContainer.Visible = anyVisible
+    end
+
+    local function setReactionState(emojiStr, actorLow, isAdd, fromNetwork)
+        S.messageReactionsState[msgSyncKey] = S.messageReactionsState[msgSyncKey] or {}
+        local mState = S.messageReactionsState[msgSyncKey]
+        local who = tostring(actorLow or lp.Name:lower()):lower()
+
+        if isAdd then
+            mState[emojiStr] = mState[emojiStr] or {}
+            local wasPresent = (mState[emojiStr][who] == true)
+            mState[emojiStr][who] = true
+            syncReactionPillRender()
+            if not wasPresent then
+                playSFX("reaction")
+                local rpScale = reactionPillContainer:FindFirstChildOfClass("UIScale") or mk("UIScale", reactionPillContainer)
+                rpScale.Scale = 0.65
+                Svc.Tween:Create(rpScale, TweenInfo.new(0.35, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
+            end
+            if not fromNetwork then
+                broadcastReactionPacket(msgSyncKey, emojiStr, true)
+            end
+        else
+            if mState[emojiStr] then
+                mState[emojiStr][who] = nil
+                if who == lp.Name:lower() then
+                    mState[emojiStr] = nil
+                end
+            end
+            syncReactionPillRender()
+            if not fromNetwork then
+                broadcastReactionPacket(msgSyncKey, emojiStr, false)
+            end
         end
     end
 
-    S.cardReactionHooks[msgSyncKey] = function(em)
-        addReactionToCard(em, true)
+    local function addReactionToCard(emojiStr, fromNetwork)
+        local myLow = lp.Name:lower()
+        local curUsers = S.messageReactionsState[msgSyncKey] and S.messageReactionsState[msgSyncKey][emojiStr]
+        if not fromNetwork and curUsers and curUsers[myLow] then
+            setReactionState(emojiStr, myLow, false, false)
+        else
+            setReactionState(emojiStr, myLow, true, fromNetwork)
+        end
     end
+
+    S.cardReactionHooks[msgSyncKey] = function(em, actorLow, isAdd)
+        setReactionState(em, actorLow, (isAdd ~= false), true)
+    end
+    syncReactionPillRender()
 
     local accentStrip = mk("Frame", card, { Size = UDim2.new(0, 3, 1, -14), Position = UDim2.new(0, 5, 0, 7), BorderSizePixel = 0, BackgroundColor3 = rgb(255, 255, 255), ZIndex = 11, Corner = UDim.new(1, 0) })
     local stripGrad = mk("UIGradient", accentStrip, { Rotation = 90 })
@@ -5432,8 +5635,8 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
     else stripGrad.Color = ColorSequence.new(Colors.Primary, Colors.PrimaryDark) end
 
     local cStroke = mk("UIStroke", card, {
-        Thickness = (hasBroadcastMention and 1.8) or ((isMentioned or isSystemAI) and 1.25 or 1.0),
-        Transparency = isMentioned and 0.22 or (isSystemAI and 0.42 or (isSelf and 0.45 or 0.74)),
+        Thickness = (hasBroadcastMention and 1.8) or ((isMentioned or isSystemAI) and 1.25 or 1.05),
+        Transparency = isMentioned and 0.20 or (isSystemAI and 0.38 or (isSelf and 0.40 or 0.68)),
         Color = hasBroadcastMention and Colors.MentionGold or (isMentioned and Colors.MentionGold or (isSystemAI and Colors.Purple or (isSelf and Colors.Primary or Colors.SurfaceHover))),
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     })
@@ -5600,6 +5803,7 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
             task.delay(0.35, function()
                 if isHoldingCard and movedDistance < 10 and not S.activeReactionMenu then
                     closeReactionMenu()
+                    closeActionMenuPopup()
                     playSFX("default")
                     
                     local menuOverlay = mk("TextButton", UI.mainFrame, { Name = "ReactionOverlay", Size = UDim2.fromScale(1, 1), BackgroundColor3 = rgb(5, 8, 14), BackgroundTransparency = 1, Text = "", ZIndex = 199, Corner = UDim.new(0, 18) })
@@ -5617,7 +5821,7 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
                     mk("UIListLayout", emojiContainer, { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 6) })
 
                     local touchY = swipeStartPos.Y - UI.mainFrame.AbsolutePosition.Y
-                    local rMenuY = isSelf and math.clamp(touchY - 95, 10, UI.mainFrame.AbsoluteSize.Y - 120) or math.clamp(touchY - 55, 10, UI.mainFrame.AbsoluteSize.Y - 48)
+                    local rMenuY = canDeleteThisMsg and math.clamp(touchY - 95, 10, UI.mainFrame.AbsoluteSize.Y - 120) or math.clamp(touchY - 55, 10, UI.mainFrame.AbsoluteSize.Y - 48)
                     local cardAbsPos = card.AbsolutePosition - UI.mainFrame.AbsolutePosition
                     rMenu.Position = UDim2.fromOffset(math.clamp(cardAbsPos.X + 20, 10, UI.mainFrame.AbsoluteSize.X - 194), rMenuY)
                     
@@ -5648,19 +5852,19 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
                     
                     S.activeReactionMenu = rMenu
 
-                    if isSelf then
-                        if not isAnyMeme then
+                    if canDeleteThisMsg then
+                        if isSelf and not isAnyMeme then
                             local selfMenu = mk("Frame", UI.mainFrame, {
-                                Size = UDim2.fromOffset(160, 68), BackgroundColor3 = rgb(25, 30, 45), BackgroundTransparency = 0.35,
-                                ZIndex = 200, Corner = UDim.new(0, 12), Stroke = {Color = rgb(255, 255, 255), Thickness = 1.0, Transparency = 0.6}
+                                Size = UDim2.fromOffset(172, 68), BackgroundColor3 = rgb(25, 30, 45), BackgroundTransparency = 0.25,
+                                ZIndex = 200, Corner = UDim.new(0, 12), Stroke = {Color = rgb(255, 255, 255), Thickness = 1.0, Transparency = 0.55}
                             })
-                            mk("Frame", selfMenu, { Size = UDim2.new(1, -16, 0, 1), Position = UDim2.new(0, 8, 0.5, 0), BackgroundColor3 = rgb(255, 255, 255), BackgroundTransparency = 0.92, BorderSizePixel = 0, ZIndex = 203 })
-                            selfMenu.Position = UDim2.fromOffset(rMenu.Position.X.Offset + 10, rMenu.Position.Y.Offset + 48)
+                            mk("Frame", selfMenu, { Size = UDim2.new(1, -16, 0, 1), Position = UDim2.new(0, 8, 0.5, 0), BackgroundColor3 = rgb(255, 255, 255), BackgroundTransparency = 0.90, BorderSizePixel = 0, ZIndex = 203 })
+                            selfMenu.Position = UDim2.fromOffset(rMenu.Position.X.Offset + 6, rMenu.Position.Y.Offset + 48)
                             local smScale = mk("UIScale", selfMenu, {Scale = 0.5})
                             Svc.Tween:Create(smScale, TweenInfo.new(0.4, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
                             
                             local editBtn = mk("TextButton", selfMenu, { Name = "EditBtn", Size = UDim2.new(1, -12, 0, 30), Position = UDim2.new(0, 6, 0, 2), BackgroundTransparency = 1, Text = "  ✏️ " .. sc("Edit Message"), Font = Enum.Font.GothamMedium, TextSize = 11.5, TextColor3 = Colors.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 202, Corner = UDim.new(0, 6) })
-                            local delBtn = mk("TextButton", selfMenu, { Name = "DelBtn", Size = UDim2.new(1, -12, 0, 30), Position = UDim2.new(0, 6, 0, 35), BackgroundTransparency = 1, Text = "  🗑️ " .. sc("Delete Message"), Font = Enum.Font.GothamMedium, TextSize = 11.5, TextColor3 = Colors.Danger, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 202, Corner = UDim.new(0, 6) })
+                            local delBtn = mk("TextButton", selfMenu, { Name = "DelBtn", Size = UDim2.new(1, -12, 0, 30), Position = UDim2.new(0, 6, 0, 35), BackgroundTransparency = 1, Text = "  🗑️ " .. sc("Delete Globally"), Font = Enum.Font.GothamBold, TextSize = 11.2, TextColor3 = Colors.Danger, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 202, Corner = UDim.new(0, 6) })
                             
                             editBtn.MouseButton1Click:Connect(function()
                                 closeReactionMenu(); playSFX("default")
@@ -5669,28 +5873,26 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
                             end)
                             delBtn.MouseButton1Click:Connect(function()
                                 closeReactionMenu(); playSFX("default")
-                                Svc.Tween:Create(cardScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
-                                task.delay(0.3, function() cardWrapper:Destroy() end)
+                                purgeMessageEverywhere(msgSyncKey, lowUser, displayMsg, true)
                             end)
                             S.activeSelfMenu = selfMenu
                         else
                             local selfGifMenu = mk("Frame", UI.mainFrame, {
-                                Size = UDim2.fromOffset(152, 36), BackgroundColor3 = rgb(25, 30, 45), BackgroundTransparency = 0.35,
+                                Size = UDim2.fromOffset(172, 36), BackgroundColor3 = rgb(25, 30, 45), BackgroundTransparency = 0.25,
                                 ZIndex = 200, Corner = UDim.new(0, 11), Stroke = {Color = Colors.Danger, Thickness = 1.0, Transparency = 0.45}
                             })
-                            selfGifMenu.Position = UDim2.fromOffset(rMenu.Position.X.Offset + 14, rMenu.Position.Y.Offset + 48)
+                            selfGifMenu.Position = UDim2.fromOffset(rMenu.Position.X.Offset + 6, rMenu.Position.Y.Offset + 48)
                             local smScale = mk("UIScale", selfGifMenu, {Scale = 0.5})
                             Svc.Tween:Create(smScale, TweenInfo.new(0.4, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
 
                             local delGifBtn = mk("TextButton", selfGifMenu, {
                                 Name = "DelGifBtn", Size = UDim2.new(1, -10, 1, -4), Position = UDim2.fromOffset(5, 2),
-                                BackgroundTransparency = 1, Text = "  🗑️ " .. sc("Delete GIF"), Font = Enum.Font.GothamBlack,
+                                BackgroundTransparency = 1, Text = "  🗑️ " .. sc("Delete Globally"), Font = Enum.Font.GothamBlack,
                                 TextSize = 11.2, TextColor3 = Colors.Danger, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 202, Corner = UDim.new(0, 6)
                             })
                             delGifBtn.MouseButton1Click:Connect(function()
                                 closeReactionMenu(); playSFX("default")
-                                Svc.Tween:Create(cardScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
-                                task.delay(0.3, function() cardWrapper:Destroy() end)
+                                purgeMessageEverywhere(msgSyncKey, lowUser, displayMsg, true)
                             end)
                             S.activeSelfMenu = selfGifMenu
                         end
@@ -5788,36 +5990,60 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
                     S.activateReplyBanner(dispName, cleanPreview)
                 end
             elseif movedDistance < 10 and not S.activeReactionMenu and not S.activeSelfMenu then
-                if isSelf or isSystemAI then return end
+                if isSystemAI then return end
                 for _, c in ipairs(UI.actionMenu:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-                createActionBtn("REPLY", Colors.Primary, function()
-                    if S.activateReplyBanner then
-                        local cleanPreview = isAnyMeme and "[Meme Sticker]" or displayMsg
-                        if #cleanPreview > 38 then cleanPreview = string.sub(cleanPreview, 1, 38) .. "..." end
-                        S.activateReplyBanner(dispName, cleanPreview)
-                    end
-                end)
-                createActionBtn("DM", Colors.Purple, function()
-                    S.privateTarget = actualUsername
-                    if S.updateInputBar then S.updateInputBar() end
-                    if S.switchChatTab then S.switchChatTab("dm") end
-                    playSFX("dm")
-                end)
-                createActionBtn("COPY", Colors.Text, function() pcall(function() S.setClip(webMemeUrlMatch or (memeIdMatch and ("ID: " .. memeIdMatch)) or displayMsg) end) end)
-                createActionBtn("TP", Colors.MentionGold, function()
-                    local targetPlr = findPlayerCI(actualUsername)
-                    if targetPlr and targetPlr.Character and targetPlr.Character:FindFirstChild("HumanoidRootPart") and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-                        lp.Character.HumanoidRootPart.CFrame = targetPlr.Character.HumanoidRootPart.CFrame
-                    end
-                end)
-                if isVerifiedOwner(lp.Name:lower(), lp.UserId) and not isAdminUser then
-                    local isTgtMuted = (S.mutedUsers[lowUser] == true)
-                    createActionBtn(isTgtMuted and "UNMT" or "MUTE", isTgtMuted and Colors.OnlineGreen or Colors.Danger, function()
-                        setGlobalMuteState(actualUsername, not isTgtMuted, true)
+
+                local btnCount = 0
+                if isSelf then
+                    createActionBtn("COPY", Colors.Text, function() pcall(function() S.setClip(webMemeUrlMatch or (memeIdMatch and ("ID: " .. memeIdMatch)) or displayMsg) end) end)
+                    btnCount += 1
+                    createActionBtn("DEL", Colors.Danger, function()
+                        purgeMessageEverywhere(msgSyncKey, lowUser, displayMsg, true)
                     end)
+                    btnCount += 1
+                else
+                    createActionBtn("REPLY", Colors.Primary, function()
+                        if S.activateReplyBanner then
+                            local cleanPreview = isAnyMeme and "[Meme Sticker]" or displayMsg
+                            if #cleanPreview > 38 then cleanPreview = string.sub(cleanPreview, 1, 38) .. "..." end
+                            S.activateReplyBanner(dispName, cleanPreview)
+                        end
+                    end)
+                    btnCount += 1
+                    createActionBtn("DM", Colors.Purple, function()
+                        S.privateTarget = actualUsername
+                        if S.updateInputBar then S.updateInputBar() end
+                        if S.switchChatTab then S.switchChatTab("dm") end
+                        playSFX("dm")
+                    end)
+                    btnCount += 1
+                    createActionBtn("COPY", Colors.Text, function() pcall(function() S.setClip(webMemeUrlMatch or (memeIdMatch and ("ID: " .. memeIdMatch)) or displayMsg) end) end)
+                    btnCount += 1
+                    createActionBtn("TP", Colors.MentionGold, function()
+                        local targetPlr = findPlayerCI(actualUsername)
+                        if targetPlr and targetPlr.Character and targetPlr.Character:FindFirstChild("HumanoidRootPart") and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                            lp.Character.HumanoidRootPart.CFrame = targetPlr.Character.HumanoidRootPart.CFrame
+                        end
+                    end)
+                    btnCount += 1
+                    if isLocalOwner and not isAdminUser then
+                        local isTgtMuted = (S.mutedUsers[lowUser] == true)
+                        createActionBtn(isTgtMuted and "UNMT" or "MUTE", isTgtMuted and Colors.OnlineGreen or Colors.Danger, function()
+                            setGlobalMuteState(actualUsername, not isTgtMuted, true)
+                        end)
+                        btnCount += 1
+                        createActionBtn("DEL", Colors.Danger, function()
+                            purgeMessageEverywhere(msgSyncKey, lowUser, displayMsg, true)
+                        end)
+                        btnCount += 1
+                    end
                 end
+
+                local menuW = math.max(96, (btnCount * 44) + 12)
+                UI.actionMenu.Size = UDim2.fromOffset(menuW, 34)
                 local cardPos = cardWrapper.AbsolutePosition - UI.mainFrame.AbsolutePosition
-                UI.actionMenu.Position = UDim2.fromOffset(math.clamp(cardPos.X + 25, 10, 180), math.clamp(cardPos.Y - 24, 30, 280))
+                UI.actionMenu.Position = UDim2.fromOffset(math.clamp(cardPos.X + 25, 10, UI.mainFrame.AbsoluteSize.X - menuW - 10), math.clamp(cardPos.Y - 24, 30, 280))
+                if UI.actionMenuBackdrop then UI.actionMenuBackdrop.Visible = true end
                 UI.actionMenu.Visible = true
             end
         end
@@ -6603,9 +6829,9 @@ UI.openBtn.MouseButton1Click:Connect(function()
     Svc.Tween:Create(UI.mainScale, tInfo2, {Scale = 1}):Play()
     Svc.Tween:Create(UI.auraScale, tInfo2, {Scale = 1}):Play()
     Svc.Tween:Create(UI.shadowScale, tInfo2, {Scale = 1}):Play()
-    Svc.Tween:Create(UI.mainFrame, tInfo3, {BackgroundTransparency = S.isGhostMode and 0.65 or 0.095}):Play()
-    Svc.Tween:Create(UI.aura, tInfo3, {ImageTransparency = S.isGhostMode and 0.90 or 0.68}):Play()
-    Svc.Tween:Create(UI.shadow, tInfo3, {ImageTransparency = S.isGhostMode and 0.55 or 0.24}):Play()
+    Svc.Tween:Create(UI.mainFrame, tInfo3, {BackgroundTransparency = S.isGhostMode and 0.65 or 0.065}):Play()
+    Svc.Tween:Create(UI.aura, tInfo3, {ImageTransparency = S.isGhostMode and 0.90 or 0.64}):Play()
+    Svc.Tween:Create(UI.shadow, tInfo3, {ImageTransparency = S.isGhostMode and 0.55 or 0.20}):Play()
     task.delay(0.15, scrollToFeedBottom)
 end)
 
@@ -6801,7 +7027,7 @@ task.spawn(function()
             UI.inputFocusGrad.Rotation = (t * 65) % 360
             UI.inputDiamondCore.Rotation = 45 + math.sin(t * 3) * 20
             local breath = (math.sin(t * 2.5) + 1) / 2
-            UI.aura.ImageTransparency = S.isGhostMode and 0.90 or (0.68 + (breath * 0.08))
+            UI.aura.ImageTransparency = S.isGhostMode and 0.90 or (0.64 + (breath * 0.08))
             UI.ledDot.BackgroundTransparency = 0.1 + (((math.sin(t * 4) + 1) / 2) * 0.5)
 
             local activeTyperNames, nowTick = {}, tick()
@@ -7005,7 +7231,7 @@ local function handleSmartAIQuery(rawQuery)
 end
 
 -- =========================================================
--- 📡 SEND MESSAGE + OWNER MUTE/UNMUTE COMMANDS
+-- 📡 SEND MESSAGE + OWNER MUTE/UNMUTE COMMANDS + STABLE MSG ID
 -- =========================================================
 local RenderedCardKeys = {}
 
@@ -7103,7 +7329,7 @@ S.sendMessageFunc = function(overrideText)
 
     if not overrideText then UI.chatInput.Text = "" end
     local encodedUserTag = lp.Name .. "::" .. lp.DisplayName
-    local genMsgId = encodedUserTag .. "_" .. tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999)) .. "_" .. payloadBodyText
+    local genMsgId = lp.Name:lower() .. "_" .. payloadBodyText:sub(1, 32)
 
     if S.privateTarget then
         addMessageToFeed(encodedUserTag, payloadBodyText, S.privateTarget, true, game.JobId, "dm", nil, genMsgId)
@@ -7159,7 +7385,7 @@ task.spawn(function()
 end)
 
 -- =========================================================
--- 📥 ZERO-FILTER RAW CHAT ENGINE (OPTIMIZED SINCE POLLING + SINGLE JOIN NOTICE)
+-- 📥 ZERO-FILTER RAW CHAT ENGINE (OPTIMIZED SINCE POLLING + PERMANENT DELETE & UNREACT SYNC)
 -- =========================================================
 local SessionJoinShown = {
     [lp.Name:lower()] = true
@@ -7178,8 +7404,10 @@ end)
 
 for _, item in ipairs(_G.TXR_GlobalHistoryCache) do
     if item.user and item.msg and not isInternalAlienPacket(item.msg) then
-        local k = item.key or (tostring(item.user) .. "_" .. tostring(item.t) .. "_" .. tostring(item.msg))
-        if not RenderedCardKeys[k] then
+        local uOnly = tostring(item.user):match("^(.-)::") or tostring(item.user)
+        local k = tostring(item.key or (uOnly:lower() .. "_" .. tostring(item.msg):sub(1, 32)))
+        local sigK = "SIG_" .. uOnly:lower() .. "_" .. tostring(item.msg)
+        if not RenderedCardKeys[k] and not S.deletedMsgIds[k] and not S.deletedMsgIds[sigK] then
             RenderedCardKeys[k] = true
             addMessageToFeed(item.user, item.msg, nil, false, game.JobId, "global", item.t, k)
         end
@@ -8254,7 +8482,6 @@ local function TXR_TagEngineInit()
         local zBehind = avZ - 2
         local zFront = avZ + 1
 
-        -- Ensure parent bezel does not clip outer glow rings while AvatarSafeZone keeps card bounds clean
         if parentHost:IsA("GuiObject") and parentHost.Name ~= "AvatarSafeZone" then
             parentHost.ClipsDescendants = false
         end
@@ -10207,6 +10434,19 @@ task.spawn(function()
                                 updateLiveCounter(rawUsernameOnly, rawDispOnly, packetJob)
                             end
 
+                            -- =====================================================
+                            -- 🗑️ PERMANENT GLOBAL MESSAGE DELETE PACKET HANDLER
+                            -- =====================================================
+                            local delMsgId, delSenderUid, delFallbackBody = m.msg:match("^__DEL_MSG__:([^|]+)|([^|]*)|?(.*)$")
+                            if delMsgId then
+                                local expectedOwner = delMsgId:match("^([^_]+)_")
+                                local canDelete = verifySenderOwnership(actorLow, delSenderUid) or (expectedOwner and expectedOwner:lower() == actorLow)
+                                if canDelete then
+                                    purgeMessageEverywhere(delMsgId, actorLow, delFallbackBody, false)
+                                end
+                                continue
+                            end
+
                             local muteTgt, muteSt, muteSenderUid = m.msg:match("^__MUTE_SET__:([^|]+)|([01])|?(.*)$")
                             if muteTgt and verifySenderOwnership(actorLow, muteSenderUid) then
                                 local sysKey = "SYS_" .. tostring(m.id or idx) .. "_" .. tostring(mTime) .. "_" .. m.msg
@@ -10296,9 +10536,39 @@ task.spawn(function()
 
                             if m.msg:find("^__LIKE__:") then continue end
 
+                            -- =====================================================
+                            -- 🔄 DEDUPLICATED ADD & REMOVE REACTION PACKET HANDLER
+                            -- =====================================================
                             local rTargetId, rEmoji = m.msg:match("^__REACT__:([^|]+)|(.*)$")
                             if rTargetId and rEmoji then
-                                if S.cardReactionHooks[rTargetId] then S.cardReactionHooks[rTargetId](rEmoji) end
+                                local rPacketId = "R_" .. tostring(m.id or mTime) .. "_" .. actorLow .. "_" .. rTargetId .. "_" .. rEmoji
+                                if not RenderedCardKeys[rPacketId] then
+                                    RenderedCardKeys[rPacketId] = true
+                                    S.messageReactionsState[rTargetId] = S.messageReactionsState[rTargetId] or {}
+                                    S.messageReactionsState[rTargetId][rEmoji] = S.messageReactionsState[rTargetId][rEmoji] or {}
+                                    S.messageReactionsState[rTargetId][rEmoji][actorLow] = true
+                                    if S.cardReactionHooks[rTargetId] then
+                                        S.cardReactionHooks[rTargetId](rEmoji, actorLow, true)
+                                    end
+                                end
+                                continue
+                            end
+
+                            local urTargetId, urEmoji = m.msg:match("^__UNREACT__:([^|]+)|(.*)$")
+                            if urTargetId and urEmoji then
+                                local urPacketId = "UR_" .. tostring(m.id or mTime) .. "_" .. actorLow .. "_" .. urTargetId .. "_" .. urEmoji
+                                if not RenderedCardKeys[urPacketId] then
+                                    RenderedCardKeys[urPacketId] = true
+                                    if S.messageReactionsState[urTargetId] and S.messageReactionsState[urTargetId][urEmoji] then
+                                        S.messageReactionsState[urTargetId][urEmoji][actorLow] = nil
+                                        if actorLow == lp.Name:lower() then
+                                            S.messageReactionsState[urTargetId][urEmoji] = nil
+                                        end
+                                    end
+                                    if S.cardReactionHooks[urTargetId] then
+                                        S.cardReactionHooks[urTargetId](urEmoji, actorLow, false)
+                                    end
+                                end
                                 continue
                             end
 
@@ -10334,9 +10604,27 @@ task.spawn(function()
 
                             if m.hidden then continue end
 
+                            local srvJob, cleanSrvMsg = m.msg:match("^%[SRV:(.-)%]%s*(.*)$")
+                            local cleanGlbMsg = m.msg:match("^%[GLB%]%s*(.*)$")
+                            local scope, effectiveMsg = "global", m.msg
+
+                            if srvJob then
+                                scope, effectiveMsg = "server", cleanSrvMsg
+                                if tostring(srvJob) ~= tostring(game.JobId) then continue end
+                            elseif cleanGlbMsg then
+                                scope, effectiveMsg = "global", cleanGlbMsg
+                            end
+
+                            local stableSyncId = actorLow .. "_" .. tostring(effectiveMsg):sub(1, 32)
+                            local sigNetKey = "SIG_" .. actorLow .. "_" .. tostring(effectiveMsg)
+                            if S.deletedMsgIds[stableSyncId] or S.deletedMsgIds[sigNetKey] then
+                                continue
+                            end
+
                             local uniqueMsgKey = (m.id and tostring(m.id)) or (tostring(mTime) .. "_" .. tostring(m.user) .. "_" .. tostring(m.msg))
-                            if RenderedCardKeys[uniqueMsgKey] then continue end
+                            if RenderedCardKeys[uniqueMsgKey] or RenderedCardKeys[stableSyncId] then continue end
                             RenderedCardKeys[uniqueMsgKey] = true
+                            RenderedCardKeys[stableSyncId] = true
 
                             S.remoteTypers[rawDispOnly] = nil
 
@@ -10349,23 +10637,12 @@ task.spawn(function()
                                 end
                             end
 
-                            local srvJob, cleanSrvMsg = m.msg:match("^%[SRV:(.-)%]%s*(.*)$")
-                            local cleanGlbMsg = m.msg:match("^%[GLB%]%s*(.*)$")
-                            local scope, effectiveMsg = "global", m.msg
-
-                            if srvJob then
-                                scope, effectiveMsg = "server", cleanSrvMsg
-                                if tostring(srvJob) ~= tostring(game.JobId) then continue end
-                            elseif cleanGlbMsg then
-                                scope, effectiveMsg = "global", cleanGlbMsg
-                            end
-
                             local pSender, pTarget, pMsg = string.match(effectiveMsg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
                             if pSender and pTarget then
                                 if lp.Name == pSender then
-                                    addMessageToFeed(m.user, pMsg, pTarget, true, m.jobId, "dm", nil, uniqueMsgKey)
+                                    addMessageToFeed(m.user, pMsg, pTarget, true, m.jobId, "dm", nil, stableSyncId)
                                 elseif lp.Name == pTarget then
-                                    addMessageToFeed(m.user, pMsg, pSender, false, m.jobId, "dm", nil, uniqueMsgKey)
+                                    addMessageToFeed(m.user, pMsg, pSender, false, m.jobId, "dm", nil, stableSyncId)
                                     if not wasInitial then
                                         local _, _, strippedBubble = pMsg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
                                         displayBubble(rawUsernameOnly, strippedBubble or pMsg); playSFX("dm")
@@ -10383,8 +10660,8 @@ task.spawn(function()
                                 continue
                             end
 
-                            addMessageToFeed(m.user, effectiveMsg, nil, false, m.jobId, scope, nil, uniqueMsgKey)
-                            if scope == "global" then saveGlobalMessageToDisk(m.user, effectiveMsg, uniqueMsgKey) end
+                            addMessageToFeed(m.user, effectiveMsg, nil, false, m.jobId, scope, nil, stableSyncId)
+                            if scope == "global" then saveGlobalMessageToDisk(m.user, effectiveMsg, stableSyncId) end
 
                             if not wasInitial and rawUsernameOnly ~= lp.Name then
                                 local _, _, strippedBubble = effectiveMsg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
@@ -10432,9 +10709,9 @@ task.spawn(function()
     saveGlobalProfilesDB()
     SessionJoinShown[lp.Name:lower()] = true
     addJoinNotice(lp.DisplayName, "server", sc("joined the server"))
-    addMessageToFeed("System::" .. BRAND_TITLE, BRAND_TITLE .. " V39.6 online! Developer Studio, EMP Clan Hub, Glassy UI & Live Dynamic Island Broadcast active.", nil, false, game.JobId, "server")
+    addMessageToFeed("System::" .. BRAND_TITLE, BRAND_TITLE .. " V40.0 4K Edition online! Global Delete Sync, Outside-Tap Dismiss, Developer Studio & Live Dynamic Island Broadcast active.", nil, false, game.JobId, "server")
     if #_G.TXR_GlobalHistoryCache == 0 then
-        addMessageToFeed("System::" .. BRAND_TITLE, "Global Network Synchronized! Permanent chat storage online.", nil, false, game.JobId, "global")
+        addMessageToFeed("System::" .. BRAND_TITLE, "Global Network Synchronized! Permanent chat storage & delete sync online.", nil, false, game.JobId, "global")
     end
     scrollToFeedBottom()
 
