@@ -4260,7 +4260,7 @@ do
     mk("Frame", pAiEmblem, { Size = UDim2.fromOffset(32, 32), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Rotation = 45, BackgroundColor3 = rgb(20, 26, 40), ZIndex = 311, Corner = UDim.new(0, 6), Stroke = { Color = Colors.Purple, Thickness = 1.2 } })
     local aiEmbTxt = mk("TextLabel", pAiEmblem, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = sc("AI"), TextColor3 = defaultPal.main, Font = Enum.Font.GothamBlack, TextSize = 15, ZIndex = 312 })
 
-    mk("Frame", pAvatarFrame, { Size = UDim2.fromOffset(17, 17), AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -2, 1, -2), BackgroundColor3 = Colors.OnlineGreen, ZIndex = 315, Corner = UDim.new(1, 0), Stroke = {Color = Colors.ObsidianBase, Thickness = 3.2} })
+    mk("Frame", pAvatarFrame, { Size = UDim2.fromOffset(17, 17), AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -2, 1, -2), BackgroundColor3 = Colors.OnlineGreen, ZIndex = 345, Corner = UDim.new(1, 0), Stroke = {Color = Colors.ObsidianBase, Thickness = 3.2} })
 
     local pMoodPill = mk("TextButton", pInnerChassis, { Size = UDim2.fromOffset(120, 24), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 99), BackgroundColor3 = rgb(18, 23, 34), Text = "🔥 " .. sc("GRINDING"), TextColor3 = Colors.Text, Font = Enum.Font.GothamBold, TextSize = 9.5, AutoButtonColor = false, ZIndex = 307, Corner = UDim.new(1, 0), Stroke = { Color = defaultPal.dark, Thickness = 0.95, Transparency = 0.35 } })
     applySpringHover(pMoodPill)
@@ -5469,8 +5469,17 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         end)
     else
         local avatarImg = mk("ImageButton", avatarSafeZone, { Size = UDim2.fromOffset(32, 32), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), BackgroundColor3 = Colors.Background, BackgroundTransparency = 0.15, ScaleType = Enum.ScaleType.Crop, AutoButtonColor = false, ZIndex = 14, Corner = UDim.new(1, 0), Stroke = { Thickness = hasAvatarFrame and 0 or 1.3, Transparency = hasAvatarFrame and 1 or 0.25, Color = isAdminUser and Colors.Primary or Colors.SurfaceHover } })
-        mk("Frame", avatarImg, { Name = "OnlineDot", Size = UDim2.fromOffset(8, 8), AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Colors.OnlineGreen, ZIndex = 25, Corner = UDim.new(1, 0), Stroke = { Color = Colors.Background, Thickness = 1.5 } })
-        table.insert(S.activeAvatarHooks, { lowUser = lowUser, img = avatarImg, safeZone = avatarSafeZone, cardRef = card, cardWrapperRef = cardWrapper, isAnyMeme = isAnyMeme })
+        local onlineDot = mk("Frame", avatarSafeZone, {
+            Name = "OnlineDot",
+            Size = UDim2.fromOffset(9, 9),
+            AnchorPoint = Vector2.new(1, 1),
+            Position = hasAvatarFrame and UDim2.new(1, -4, 1, -4) or UDim2.new(1, -1, 1, -1),
+            BackgroundColor3 = Colors.OnlineGreen,
+            ZIndex = 35,
+            Corner = UDim.new(1, 0),
+            Stroke = { Color = Colors.Surface, Thickness = 1.8 }
+        })
+        table.insert(S.activeAvatarHooks, { lowUser = lowUser, img = avatarImg, dot = onlineDot, safeZone = avatarSafeZone, cardRef = card, cardWrapperRef = cardWrapper, isAnyMeme = isAnyMeme })
 
         if S.attachAvatarFrame then
             S.attachAvatarFrame(avatarImg, lowUser, 32, 13)
@@ -7528,7 +7537,7 @@ local function TXR_TagEngineInit()
                             S.grantedFrames[low] = {}
                             for kStr, rec in pairs(map) do
                                 local idx = tonumber(kStr)
-                                if type(rec) == "table" and idx and (not rec.exp or rec.exp == 0 or rec.exp > nowSec()) then
+                                if type(rec) == "table" and idx and S.__txFrameDefs and S.__txFrameDefs[idx] and (not rec.exp or rec.exp == 0 or rec.exp > nowSec()) then
                                     S.grantedFrames[low][tostring(idx)] = rec
                                 end
                             end
@@ -8273,6 +8282,14 @@ local function TXR_TagEngineInit()
                 if hook.safeZone and hook.safeZone.Parent then
                     hook.safeZone.Size = UDim2.fromOffset(hasF and 48 or 34, hasF and 48 or 34)
                     hook.safeZone.Position = UDim2.fromOffset(hasF and 14 or 13, hasF and 6 or 8)
+                end
+                local dotObj = hook.dot or (hook.safeZone and hook.safeZone:FindFirstChild("OnlineDot")) or hook.img:FindFirstChild("OnlineDot")
+                if dotObj and dotObj.Parent then
+                    if hook.safeZone and dotObj.Parent ~= hook.safeZone then
+                        dotObj.Parent = hook.safeZone
+                    end
+                    dotObj.ZIndex = 35
+                    dotObj.Position = hasF and UDim2.new(1, -4, 1, -4) or UDim2.new(1, -1, 1, -1)
                 end
                 if hook.cardRef and hook.cardRef.Parent then
                     local cBox = hook.cardRef:FindFirstChild("CardContentBox")
