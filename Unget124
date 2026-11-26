@@ -369,11 +369,8 @@ local function generateProceduralRichAccount(serialIdx)
         richDisp = "i" .. baseFirst
     end
 
-    -- Guaranteed real high-value Roblox avatar thumbnail ID (Headless, Korblox, Valkyrie, Dominus, OG avatars)
     local realisticUid = VerifiedRichRobloxUserIds[(serialIdx % #VerifiedRichRobloxUserIds) + 1]
 
-    -- Realistic Anime/Cyber Media Mix:
-    -- 55% BOTH (Custom Anime PFP + Banner), 20% PFP_ONLY, 15% BANNER_ONLY, 10% NONE (Pure Expensive Roblox Avatar)
     local mediaBucket = (serialIdx * 17 + 5) % 20
     local customAvUrl = ""
     local customBanUrl = ""
@@ -2105,7 +2102,6 @@ local function refreshRosterUI()
         local rawU = (type(info) == "table" and info.user) or u
         local dName = (type(info) == "table" and info.disp) or u
         local t = (type(info) == "table" and info.time) or 0
-        -- ✅ Sirf wahi script user dikhega jo abhi bhi isi server mein hai
         local stillInServer = (u == lp.Name:lower()) or (findPlayerCI(rawU) ~= nil)
         if stillInServer and (now - t < 180) then
             local isMuted = (S.mutedUsers[u] == true)
@@ -4899,7 +4895,7 @@ do
                 pDmBtn.Position = UDim2.new(0.42, 3, 0, 0)
                 pTpBtn.Size = UDim2.new(0.29, 0, 1, 0)
                 pTpBtn.Position = UDim2.new(0.71, 3, 0, 0)
-                pMuteBtn.Visible = false 
+                pMuteBtn.Visible = false
             end
         end
     end
@@ -5196,7 +5192,6 @@ local function updateLiveCounter(username, dispName, packetJobId)
     local lowU = username:lower()
     if lowU == "system" then return end
 
-    -- ✅ Sirf SAME SERVER (game.JobId) ke TXR script users hi ACTIVE roster mein aayenge
     if packetJobId and tostring(packetJobId) ~= "" and tostring(packetJobId) ~= tostring(game.JobId) then
         return
     end
@@ -7202,7 +7197,7 @@ end
 
 
 -- =========================================================
--- 🏷️ TXR TAG ENGINE V2 + PREMIUM PROFILE GLOW + FRAMES
+-- 🏷️ TXR TAG ENGINE V2 + PREMIUM PROFILE GLOW + SHOP-TIER VECTOR FRAMES
 -- =========================================================
 do
 local function TXR_TagEngineInit()
@@ -7241,7 +7236,7 @@ local function TXR_TagEngineInit()
         return "⏳ " .. fmtDur(exp - nowSec())
     end
     local function fmtStamp(exp)
-        if not exp or exp == 0 then return "never" end
+        if not exp or exp == 0 then return "Never" end
         return os.date("%d %b %H:%M", exp)
     end
 
@@ -7487,11 +7482,11 @@ local function TXR_TagEngineInit()
             S.currentOwnerBadge = key
             saveProfilePrefs()
             broadcastMyProfileStyle()
-            if mode == "live" then
+            if mode == "live" and not isVerifiedOwner(myLowName, lp.UserId) then
                 local tTitle = BadgePresets[key].Title
                 local remain = (exp == 0) and "PERMANENT" or fmtDur(exp - nowSec())
                 notifyIsland("TAGGIFT", "🎁 " .. tTitle .. "  •  " .. remain)
-                sysNote(string.format("🎁 Owner (%s) ne tumhe %s tag diya — %s (expires: %s). 'Live Tags' menu se select/hide kar sakte ho.", tostring(byName), tTitle, remain, fmtStamp(exp)))
+                sysNote(string.format("🎁 Owner (%s) gifted you the %s tag — %s (Expires: %s). Manage it in the 'Live Tags' menu.", tostring(byName), tTitle, remain, fmtStamp(exp)))
                 playSFX("broadcast")
             end
         else
@@ -7527,9 +7522,9 @@ local function TXR_TagEngineInit()
             end
             saveProfilePrefs()
             broadcastMyProfileStyle()
-            if mode == "live" then
-                notifyIsland("TAGLOST", "🗑️ Owner ne tumhara " .. ((key == "ALL") and "tags" or tostring(BadgePresets[key] and BadgePresets[key].Title or key)) .. " hata diya")
-                sysNote("🗑️ Owner ne tumhare gifted tag(s) wapis le liye.")
+            if mode == "live" and not isVerifiedOwner(myLowName, lp.UserId) then
+                notifyIsland("TAGLOST", "🗑️ Owner revoked your " .. ((key == "ALL") and "tags" or tostring(BadgePresets[key] and BadgePresets[key].Title or key)))
+                sysNote("🗑️ The Owner has revoked your gifted tag(s).")
             end
         else
             saveEngineDB()
@@ -7547,43 +7542,43 @@ local function TXR_TagEngineInit()
         end
         S.knownUsers[tLow] = S.knownUsers[tLow] or tName or tLow
         saveEngineDB()
-        if tLow == myLowName and mode == "live" then
+        if tLow == myLowName and mode == "live" and not isVerifiedOwner(myLowName, lp.UserId) then
             if style > 0 then
                 local remain = (exp == 0) and "PERMANENT" or fmtDur(exp - nowSec())
-                notifyIsland("GLOWGIFT", "✨ " .. GlowPresets[style].name .. " glow  •  " .. remain)
-                sysNote(string.format("✨ Owner ne tumhe Premium Profile Glow '%s' diya — %s (expires: %s). Apna profile kholke dekho!", GlowPresets[style].name, remain, fmtStamp(exp)))
+                notifyIsland("GLOWGIFT", "✨ " .. GlowPresets[style].name .. " Glow  •  " .. remain)
+                sysNote(string.format("✨ Owner gifted you the Premium Profile Glow '%s' — %s (Expires: %s). Open your profile to view!", GlowPresets[style].name, remain, fmtStamp(exp)))
                 playSFX("broadcast")
             else
-                notifyIsland("TAGLOST", "✨ Tumhara Premium Glow hata diya gaya")
+                notifyIsland("TAGLOST", "✨ Your Premium Profile Glow was removed")
             end
         end
         refreshAll()
     end
 
     -- =====================================================
-    -- PREMIUM PROFILE FRAMES (5 GIRLS / 12 MALE / 3 COUPLE)
+    -- 💎 DISCORD SHOP-TIER VECTOR AVATAR DECORATIONS (ZERO EMOJIS!)
     -- =====================================================
     local FrameDefs = {
-        { name = "SAKURA PETALS", kind = "GIRL", cols = { rgb(255,150,200), rgb(255,235,245), rgb(255,105,170) }, orbit = "🌸", n = 7, top = "🎀", speed = 0.7 },
-        { name = "BUTTERFLY GARDEN", kind = "GIRL", cols = { rgb(190,120,255), rgb(120,220,255), rgb(255,150,220) }, orbit = "🦋", n = 5, top = "✨", speed = 0.8 },
-        { name = "BUNNY LOVE", kind = "GIRL", cols = { rgb(255,182,213), rgb(255,255,255), rgb(255,120,175) }, orbit = "💖", n = 6, top = "🐰", speed = 0.6 },
-        { name = "STARLIGHT PRINCESS", kind = "GIRL", cols = { rgb(255,215,95), rgb(255,150,210), rgb(200,140,255) }, orbit = "⭐", n = 8, top = "👑", speed = 0.9 },
-        { name = "KITTY CUTIE", kind = "GIRL", cols = { rgb(255,170,200), rgb(255,225,240), rgb(190,150,255) }, orbit = "🐾", n = 6, top = "🐱", speed = 0.65 },
-        { name = "DRAGON FIRE", kind = "MALE", cols = { rgb(255,40,40), rgb(255,150,30), rgb(255,235,90) }, orbit = "🔥", n = 7, top = "🐉", speed = 1.1 },
-        { name = "FROST KING", kind = "MALE", cols = { rgb(120,230,255), rgb(235,250,255), rgb(70,140,255) }, orbit = "❄️", n = 7, top = "👑", speed = 0.8 },
-        { name = "THUNDER LORD", kind = "MALE", cols = { rgb(255,235,60), rgb(90,150,255), rgb(255,255,255) }, orbit = "⚡", n = 6, top = "⚡", speed = 1.4 },
-        { name = "SHADOW NINJA", kind = "MALE", cols = { rgb(150,60,255), rgb(30,20,60), rgb(0,245,255) }, orbit = "✦", n = 6, top = "🥷", speed = 1.0 },
-        { name = "DEMON KING", kind = "MALE", cols = { rgb(255,15,60), rgb(120,0,30), rgb(255,90,40) }, orbit = "🔥", n = 6, top = "😈", speed = 1.0 },
-        { name = "GOLDEN EMPEROR", kind = "MALE", cols = { rgb(255,215,55), rgb(255,248,185), rgb(225,150,25) }, orbit = "✨", n = 8, top = "👑", speed = 0.7 },
-        { name = "CYBER GLITCH", kind = "MALE", cols = { rgb(0,245,255), rgb(255,35,120), rgb(255,255,255) }, orbit = "💠", n = 6, top = "🤖", speed = 1.5 },
-        { name = "VENOM VIPER", kind = "MALE", cols = { rgb(20,255,140), rgb(0,150,90), rgb(190,255,120) }, orbit = "🐍", n = 5, top = "☠️", speed = 0.9 },
-        { name = "BLOOD MOON", kind = "MALE", cols = { rgb(200,10,40), rgb(60,0,15), rgb(255,110,110) }, orbit = "🦇", n = 6, top = "🌙", speed = 0.8 },
-        { name = "DIAMOND ICE", kind = "MALE", cols = { rgb(150,235,255), rgb(255,255,255), rgb(160,160,255) }, orbit = "💎", n = 6, top = "💎", speed = 0.9 },
-        { name = "SKULL REAPER", kind = "MALE", cols = { rgb(235,240,250), rgb(100,112,135), rgb(180,50,255) }, orbit = "💀", n = 5, top = "☠️", speed = 0.8 },
-        { name = "NEON SAMURAI", kind = "MALE", cols = { rgb(255,40,200), rgb(60,90,255), rgb(0,240,255) }, orbit = "⚔️", n = 5, top = "⛩️", speed = 1.2 },
-        { name = "LOVE BIRDS", kind = "COUPLE", cols = { rgb(255,70,120), rgb(255,180,210), rgb(255,60,60) }, orbit = "💕", n = 8, top = "💞", left = "🕊️", right = "🕊️", speed = 0.9 },
-        { name = "MOON & SUN", kind = "COUPLE", cols = { rgb(255,215,80), rgb(150,170,255), rgb(255,150,60) }, orbit = "✨", n = 8, top = "💫", left = "🌙", right = "☀️", speed = 0.8 },
-        { name = "KING & QUEEN", kind = "COUPLE", cols = { rgb(255,215,55), rgb(255,90,170), rgb(190,110,255) }, orbit = "💎", n = 8, top = "💍", left = "🤴", right = "👸", speed = 0.7 }
+        { name = "SAKURA AURORA",      kind = "GIRL",   cols = { rgb(255,150,205), rgb(255,232,246), rgb(255,95,168) },  nodes = 6, accent = "DIAMOND", speed = 0.85 },
+        { name = "AMETHYST HALO",      kind = "GIRL",   cols = { rgb(195,120,255), rgb(120,220,255), rgb(255,155,230) }, nodes = 5, accent = "CROWN",   speed = 0.90 },
+        { name = "ROSE QUARTZ PRISM",  kind = "GIRL",   cols = { rgb(255,175,210), rgb(255,255,255), rgb(255,110,175) }, nodes = 6, accent = "ARC",     speed = 0.75 },
+        { name = "CELESTIAL TIARA",    kind = "GIRL",   cols = { rgb(255,215,95),  rgb(255,150,210), rgb(200,140,255) }, nodes = 8, accent = "CROWN",   speed = 0.95 },
+        { name = "VELVET RIBBON",      kind = "GIRL",   cols = { rgb(255,140,190), rgb(255,220,238), rgb(195,135,255) }, nodes = 4, accent = "DIAMOND", speed = 0.70 },
+        { name = "CRIMSON OVERLORD",   kind = "MALE",   cols = { rgb(255,35,55),   rgb(255,145,25),  rgb(255,235,95)  }, nodes = 8, accent = "CROWN",   speed = 1.25 },
+        { name = "ABSOLUTE ZERO",      kind = "MALE",   cols = { rgb(110,230,255), rgb(235,250,255), rgb(55,135,255)  }, nodes = 6, accent = "ARC",     speed = 0.90 },
+        { name = "VOLT TEMPEST",       kind = "MALE",   cols = { rgb(255,235,55),  rgb(75,155,255),  rgb(255,255,255) }, nodes = 6, accent = "DIAMOND", speed = 1.45 },
+        { name = "PHANTOM ECLIPSE",    kind = "MALE",   cols = { rgb(155,65,255),  rgb(28,18,58),    rgb(0,245,255)   }, nodes = 6, accent = "ARC",     speed = 1.05 },
+        { name = "ABYSSAL VORTEX",     kind = "MALE",   cols = { rgb(255,15,65),   rgb(110,0,28),    rgb(255,95,40)   }, nodes = 6, accent = "DIAMOND", speed = 1.15 },
+        { name = "SOVEREIGN GOLD",     kind = "MALE",   cols = { rgb(255,215,55),  rgb(255,248,190), rgb(225,150,25)  }, nodes = 8, accent = "CROWN",   speed = 0.85 },
+        { name = "CYBER NEURAL",       kind = "MALE",   cols = { rgb(0,245,255),   rgb(255,35,125),  rgb(255,255,255) }, nodes = 6, accent = "ARC",     speed = 1.50 },
+        { name = "VENOM REACTOR",      kind = "MALE",   cols = { rgb(20,255,140),  rgb(0,145,85),    rgb(190,255,120) }, nodes = 5, accent = "DIAMOND", speed = 1.00 },
+        { name = "ECLIPSE CRIMSON",    kind = "MALE",   cols = { rgb(205,15,45),   rgb(55,0,15),     rgb(255,115,115) }, nodes = 6, accent = "ARC",     speed = 0.85 },
+        { name = "ASTRAL DIAMOND",     kind = "MALE",   cols = { rgb(150,235,255), rgb(255,255,255), rgb(160,160,255) }, nodes = 8, accent = "DIAMOND", speed = 0.95 },
+        { name = "OBSIDIAN REAPER",    kind = "MALE",   cols = { rgb(235,240,250), rgb(95,110,135),  rgb(180,55,255)  }, nodes = 6, accent = "CROWN",   speed = 0.90 },
+        { name = "HYPERION RONIN",     kind = "MALE",   cols = { rgb(255,40,200),  rgb(60,90,255),   rgb(0,240,255)   }, nodes = 6, accent = "ARC",     speed = 1.25 },
+        { name = "ETERNAL BOND",       kind = "COUPLE", cols = { rgb(255,65,125),  rgb(255,185,215), rgb(255,55,65)   }, nodes = 8, accent = "CROWN",   speed = 0.95 },
+        { name = "SOLSTICE DUALITY",   kind = "COUPLE", cols = { rgb(255,215,80),  rgb(140,175,255), rgb(255,145,55)  }, nodes = 8, accent = "ARC",     speed = 0.85 },
+        { name = "IMPERIAL DYNASTY",   kind = "COUPLE", cols = { rgb(255,215,55),  rgb(255,90,170),  rgb(190,110,255) }, nodes = 8, accent = "CROWN",   speed = 0.80 }
     }
     S.__txFrameDefs = FrameDefs
     for _, fd in ipairs(FrameDefs) do
@@ -7609,7 +7604,7 @@ local function TXR_TagEngineInit()
     local function buildFrameDeco(fd)
         clearFrameDeco()
         local root = mk("Frame", UI.profileModal, {
-            Size = UDim2.fromOffset(104, 104), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(60, 88),
+            Size = UDim2.fromOffset(102, 102), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(60, 88),
             BackgroundTransparency = 1, ZIndex = 340
         })
         frameRoot = root
@@ -7623,32 +7618,62 @@ local function TXR_TagEngineInit()
             local g = mk("UIGradient", st, { Color = seq })
             return f, st, g
         end
-        local _, st3, g3 = ring(10, 8, 0.78, fd.seq2, 341)
-        local _, st1, g1 = ring(0, 3.4, 0.02, fd.seq, 343)
-        local _, st2, g2 = ring(-10, 1.3, 0.35, fd.seq2, 344)
+        -- 4-Layer Shop-Tier Counter-Rotating Neon & Obsidian Bezel Rings
+        local _, st4, g4 = ring(12, 6.5, 0.80, fd.seq2, 341)
+        local _, st1, g1 = ring(2,  3.2, 0.04, fd.seq,  343)
+        local _, st2, g2 = ring(-6, 1.6, 0.22, fd.seq2, 344)
+        local _, st3, g3 = ring(-12, 1.0, 0.45, fd.seq, 345)
 
+        -- Geometric Diamond Facet Shards (Pure Vector, Zero Emojis)
         local orb = {}
-        local cnt = fd.n or 6
+        local cnt = fd.nodes or 6
         for i = 1, cnt do
-            local l = mk("TextLabel", root, {
-                Size = UDim2.fromOffset(16, 16), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
-                BackgroundTransparency = 1, Text = fd.orbit or "✦", TextSize = 13, Font = Enum.Font.SourceSansBold,
-                TextColor3 = fd.cols[((i - 1) % #fd.cols) + 1], ZIndex = 346
+            local col = fd.cols[((i - 1) % #fd.cols) + 1]
+            local shard = mk("Frame", root, {
+                Size = UDim2.fromOffset(6, 6), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+                Rotation = 45, BackgroundColor3 = col, BorderSizePixel = 0, ZIndex = 346, Corner = UDim.new(0, 1.5),
+                Stroke = { Color = Color3.new(1, 1, 1), Thickness = 0.8, Transparency = 0.25 }
             })
-            table.insert(orb, { lbl = l, ph = ((i - 1) / cnt) * math.pi * 2 })
+            table.insert(orb, { node = shard, ph = ((i - 1) / cnt) * math.pi * 2 })
         end
 
-        local function orn(txt, pos, sz)
-            return mk("TextLabel", root, {
-                Size = UDim2.fromOffset(sz, sz), AnchorPoint = Vector2.new(0.5, 0.5), Position = pos,
-                BackgroundTransparency = 1, Text = txt, TextSize = sz - 4, Font = Enum.Font.SourceSansBold, ZIndex = 348
+        -- Top Crown / Prism Crest Vector Emblem
+        local crestWrap = mk("Frame", root, {
+            Size = UDim2.fromOffset(18, 12), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, -2),
+            BackgroundTransparency = 1, ZIndex = 348
+        })
+        local cMain = mk("Frame", crestWrap, {
+            Size = UDim2.fromOffset(9, 9), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+            Rotation = 45, BackgroundColor3 = fd.cols[1], BorderSizePixel = 0, ZIndex = 349, Corner = UDim.new(0, 2),
+            Stroke = { Color = Color3.new(1, 1, 1), Thickness = 1.0, Transparency = 0.15 }
+        })
+        if fd.accent == "CROWN" or fd.kind == "COUPLE" then
+            mk("Frame", crestWrap, {
+                Size = UDim2.fromOffset(6, 6), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.18, 0, 0.62, 0),
+                Rotation = 45, BackgroundColor3 = fd.cols[2] or fd.cols[1], BorderSizePixel = 0, ZIndex = 348, Corner = UDim.new(0, 1.5)
+            })
+            mk("Frame", crestWrap, {
+                Size = UDim2.fromOffset(6, 6), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.82, 0, 0.62, 0),
+                Rotation = 45, BackgroundColor3 = fd.cols[3] or fd.cols[1], BorderSizePixel = 0, ZIndex = 348, Corner = UDim.new(0, 1.5)
             })
         end
-        local top = fd.top and orn(fd.top, UDim2.new(0.5, 0, 0, 4), 28) or nil
-        local left = fd.left and orn(fd.left, UDim2.new(0, 2, 0.5, 12), 24) or nil
-        local right = fd.right and orn(fd.right, UDim2.new(1, -2, 0.5, 12), 24) or nil
 
-        frameAnim = { g1 = g1, g2 = g2, g3 = g3, st3 = st3, orb = orb, top = top, left = left, right = right, speed = fd.speed or 1 }
+        -- Side Wing Finials for Couple / Tier Frames
+        local leftWing, rightWing = nil, nil
+        if fd.kind == "COUPLE" or fd.accent == "ARC" then
+            leftWing = mk("Frame", root, {
+                Size = UDim2.fromOffset(7, 7), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, -2, 0.5, 0),
+                Rotation = 45, BackgroundColor3 = fd.cols[1], BorderSizePixel = 0, ZIndex = 347, Corner = UDim.new(0, 1.5),
+                Stroke = { Color = Color3.new(1, 1, 1), Thickness = 0.8, Transparency = 0.25 }
+            })
+            rightWing = mk("Frame", root, {
+                Size = UDim2.fromOffset(7, 7), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(1, 2, 0.5, 0),
+                Rotation = 45, BackgroundColor3 = fd.cols[2] or fd.cols[1], BorderSizePixel = 0, ZIndex = 347, Corner = UDim.new(0, 1.5),
+                Stroke = { Color = Color3.new(1, 1, 1), Thickness = 0.8, Transparency = 0.25 }
+            })
+        end
+
+        frameAnim = { g1 = g1, g2 = g2, g3 = g3, g4 = g4, st4 = st4, orb = orb, crest = crestWrap, cMain = cMain, left = leftWing, right = rightWing, speed = fd.speed or 1 }
     end
 
     S.__txFrameKey = nil
@@ -7672,14 +7697,14 @@ local function TXR_TagEngineInit()
         end
         S.knownUsers[tLow] = S.knownUsers[tLow] or tName or tLow
         saveEngineDB()
-        if tLow == myLowName and mode == "live" then
+        if tLow == myLowName and mode == "live" and not isVerifiedOwner(myLowName, lp.UserId) then
             if style > 0 then
                 local remain = (exp == 0) and "PERMANENT" or fmtDur(exp - nowSec())
-                notifyIsland("FRAMEGIFT", "🖼️ " .. FrameDefs[style].name .. " frame  •  " .. remain)
-                sysNote(string.format("🖼️ Owner ne tumhe Profile Frame '%s' diya — %s (expires: %s). Apna profile kholke dekho!", FrameDefs[style].name, remain, fmtStamp(exp)))
+                notifyIsland("FRAMEGIFT", "🖼️ " .. FrameDefs[style].name .. " Frame  •  " .. remain)
+                sysNote(string.format("🖼️ Owner gifted you the Profile Frame '%s' — %s (Expires: %s). Open your profile to view!", FrameDefs[style].name, remain, fmtStamp(exp)))
                 playSFX("broadcast")
             else
-                notifyIsland("TAGLOST", "🖼️ Tumhara Profile Frame hata diya gaya")
+                notifyIsland("TAGLOST", "🖼️ Your Profile Frame was removed")
             end
         end
         S.__txFrameKey = nil
@@ -7715,22 +7740,22 @@ local function TXR_TagEngineInit()
             frameRoot.Visible = true
             frT = frT + dt
             local t, sp = frT, a.speed
-            a.g1.Rotation = (t * 80 * sp) % 360
-            a.g2.Rotation = -(t * 55 * sp) % 360
-            a.g3.Rotation = (t * 40 * sp) % 360
-            a.st3.Transparency = 0.72 + ((math.sin(t * 2.6 * sp) + 1) / 2) * 0.18
+            a.g1.Rotation = (t * 85 * sp) % 360
+            a.g2.Rotation = -(t * 60 * sp) % 360
+            a.g3.Rotation = (t * 110 * sp) % 360
+            a.g4.Rotation = -(t * 35 * sp) % 360
+            a.st4.Transparency = 0.74 + ((math.sin(t * 2.6 * sp) + 1) / 2) * 0.16
             for _, o in ipairs(a.orb) do
-                local ang = t * sp + o.ph
-                o.lbl.Position = UDim2.new(0.5, math.cos(ang) * 53, 0.5, math.sin(ang) * 53)
-                o.lbl.Rotation = math.sin(t * 2 + o.ph) * 18
-                o.lbl.TextTransparency = 0.05 + ((math.sin(t * 3 + o.ph) + 1) / 2) * 0.25
+                local ang = (t * 0.9 * sp) + o.ph
+                o.node.Position = UDim2.new(0.5, math.cos(ang) * 49, 0.5, math.sin(ang) * 49)
+                o.node.Rotation = 45 + (t * 65 * sp)
+                o.node.BackgroundTransparency = 0.08 + ((math.sin(t * 3 + o.ph) + 1) / 2) * 0.35
             end
-            if a.top then
-                a.top.Position = UDim2.new(0.5, 0, 0, 4 + math.sin(t * 3 * sp) * 2)
-                a.top.Rotation = math.sin(t * 2 * sp) * 6
+            if a.crest then
+                a.crest.Position = UDim2.new(0.5, 0, 0, -2 + math.sin(t * 2.8 * sp) * 1.5)
             end
-            if a.left then a.left.Position = UDim2.new(0, 2, 0.5, 12 + math.sin(t * 2.4) * 3); a.left.Rotation = math.sin(t * 2) * 10 end
-            if a.right then a.right.Position = UDim2.new(1, -2, 0.5, 12 + math.sin(t * 2.4 + 1.5) * 3); a.right.Rotation = -math.sin(t * 2) * 10 end
+            if a.left then a.left.Position = UDim2.new(0, -2, 0.5, math.sin(t * 2.4) * 2.5) end
+            if a.right then a.right.Position = UDim2.new(1, 2, 0.5, math.sin(t * 2.4 + 1.5) * 2.5) end
         end)
     end
 
@@ -7743,7 +7768,9 @@ local function TXR_TagEngineInit()
                     if rec.exp and rec.exp ~= 0 and rec.exp <= now then
                         S.profileFrame[low] = nil
                         changed = true
-                        if low == myLowName then notifyIsland("TAGLOST", "🖼️ Tumhara Profile Frame expire ho gaya") end
+                        if low == myLowName and not isVerifiedOwner(myLowName, lp.UserId) then
+                            notifyIsland("TAGLOST", "🖼️ Your Profile Frame has expired")
+                        end
                     end
                 end
                 if changed then
@@ -8058,7 +8085,7 @@ local function TXR_TagEngineInit()
     mk("UIGridLayout", teGrid, { CellSize = UDim2.new(0.5, -5, 0, 36), CellPadding = UDim2.fromOffset(6, 6), SortOrder = Enum.SortOrder.LayoutOrder })
 
     local secDur = section(72, 5)
-    smallLabel(secDur, "DURATION (TIMER - TARGET KO DIKHEGA):", 0)
+    smallLabel(secDur, "DURATION (VISIBLE TO TARGET):", 0)
     local durScroll = mk("ScrollingFrame", secDur, {
         Size = UDim2.new(1, 0, 0, 24), Position = UDim2.fromOffset(0, 16), BackgroundTransparency = 1,
         ScrollBarThickness = 0, ScrollingDirection = Enum.ScrollingDirection.X,
@@ -8178,7 +8205,7 @@ local function TXR_TagEngineInit()
                 local sw = mk("Frame", cell, { Size = UDim2.fromOffset(26, 26), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 6, 0.5, 0), BackgroundTransparency = 1, ZIndex = 425, Corner = UDim.new(1, 0) })
                 local sst = mk("UIStroke", sw, { Thickness = 2.4, Color = Color3.new(1, 1, 1), ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
                 mk("UIGradient", sst, { Color = fd.seq, Rotation = 45 })
-                mk("TextLabel", sw, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = fd.top or "✦", TextSize = 12, Font = Enum.Font.SourceSansBold, ZIndex = 426 })
+                mk("Frame", sw, { Size = UDim2.fromOffset(8, 8), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Rotation = 45, BackgroundColor3 = fd.cols[1], BorderSizePixel = 0, ZIndex = 426, Corner = UDim.new(0, 2) })
                 local kindIco = (fd.kind == "GIRL" and "💗") or (fd.kind == "COUPLE" and "💞") or "⚔️"
                 mk("TextLabel", cell, { Size = UDim2.new(1, -40, 1, 0), Position = UDim2.fromOffset(38, 0), BackgroundTransparency = 1, Text = kindIco .. " " .. sc(fd.name), TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 7.8, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 425 })
                 applySpringHover(cell)
@@ -8353,6 +8380,7 @@ local function TXR_TagEngineInit()
         if not tName or tName == "" then flashBtn(giveBtn, sc("NO TARGET")); return end
         if not engineSel then flashBtn(giveBtn, sc("PICK ITEM")); return end
         local tLow = tName:lower()
+        local isSelfGift = (tLow == myLowName)
         local exp = (engineDur > 0) and math.floor(nowSec() + engineDur) or 0
         if engineSel.kind == "frame" then
             local fd = S.__txFrameDefs[engineSel.key]
@@ -8364,7 +8392,9 @@ local function TXR_TagEngineInit()
                 applyFrame(pl, partner, engineSel.key, exp, tName, lp.DisplayName, "local")
                 sendHidden(string.format("__FRAMESET__:%s|%d|%d|%s|%d", pl, engineSel.key, exp, tName, lp.UserId))
             end
-            sysNote(string.format("✅ @%s ko '%s' profile frame diya — %s", tName, fd.name, (exp == 0) and "PERMANENT" or ("valid till " .. fmtStamp(exp))))
+            if not isSelfGift then
+                sysNote(string.format("✅ Granted '%s' Profile Frame to @%s — %s", fd.name, tName, (exp == 0) and "PERMANENT" or ("Valid until " .. fmtStamp(exp))))
+            end
             flashBtn(giveBtn, "✓ " .. sc("SENT"))
             playSFX("reaction")
             rebuildGrid()
@@ -8374,11 +8404,15 @@ local function TXR_TagEngineInit()
         if engineSel.kind == "tag" then
             applyGrant(tLow, tName, engineSel.key, exp, lp.DisplayName, "local")
             sendHidden(string.format("__TAGGIVE__:%s|%s|%d|%d", tLow, engineSel.key, exp, lp.UserId))
-            sysNote(string.format("✅ @%s ko %s tag diya — %s", tName, tostring(BadgePresets[engineSel.key].Title), (exp == 0) and "PERMANENT" or ("valid till " .. fmtStamp(exp))))
+            if not isSelfGift then
+                sysNote(string.format("✅ Granted %s tag to @%s — %s", tostring(BadgePresets[engineSel.key].Title), tName, (exp == 0) and "PERMANENT" or ("Valid until " .. fmtStamp(exp))))
+            end
         else
             applyGlow(tLow, tName, engineSel.key, exp, lp.DisplayName, "local")
             sendHidden(string.format("__GLOWSET__:%s|%d|%d|%d", tLow, engineSel.key, exp, lp.UserId))
-            sysNote(string.format("✅ @%s ko '%s' premium glow diya — %s", tName, GlowPresets[engineSel.key].name, (exp == 0) and "PERMANENT" or ("valid till " .. fmtStamp(exp))))
+            if not isSelfGift then
+                sysNote(string.format("✅ Granted '%s' Premium Glow to @%s — %s", GlowPresets[engineSel.key].name, tName, (exp == 0) and "PERMANENT" or ("Valid until " .. fmtStamp(exp))))
+            end
         end
         flashBtn(giveBtn, "✓ " .. sc("SENT"))
         playSFX("reaction")
@@ -8690,16 +8724,18 @@ local function TXR_TagEngineInit()
                     if rec.style and rec.style > 0 and rec.exp and rec.exp ~= 0 and rec.exp <= now then
                         S.profileGlow[low] = nil
                         glowExpired = true
-                        if low == myLowName then
-                            notifyIsland("TAGLOST", "✨ Tumhara Premium Glow expire ho gaya")
+                        if low == myLowName and not isVerifiedOwner(myLowName, lp.UserId) then
+                            notifyIsland("TAGLOST", "✨ Your Premium Profile Glow has expired")
                         end
                     end
                 end
                 if meChanged then
                     saveProfilePrefs()
                     broadcastMyProfileStyle()
-                    notifyIsland("TAGLOST", "⌛ " .. table.concat(lostNames, ", ") .. " tag expire ho gaya")
-                    sysNote("⌛ Tumhara timed tag expire ho gaya: " .. table.concat(lostNames, ", "))
+                    if not isVerifiedOwner(myLowName, lp.UserId) then
+                        notifyIsland("TAGLOST", "⌛ " .. table.concat(lostNames, ", ") .. " tag has expired")
+                        sysNote("⌛ Your timed tag has expired: " .. table.concat(lostNames, ", "))
+                    end
                 end
                 if meChanged or glowExpired then
                     saveEngineDB()
