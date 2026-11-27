@@ -208,6 +208,7 @@ task.spawn(function()
             local nameEv = re:WaitForChild("1RPNam1eTex1t", 10)
             local colorEv = re:FindFirstChild("1RPNam1eColo1r")
             local targetRpName = "⌜ᴛ x ʀ 〆 ʀ ᴇ ᴄ ʜ ᴀ ᴛ⌟"
+            targetRpName = "ᴛ x ʀ 〆 ʀ ᴇ ᴄ ʜ ᴀ ᴛ"
 
             if nameEv then
                 nameEv:FireServer("RolePlayName", targetRpName, rgb(255, 15, 35))
@@ -11938,5 +11939,66 @@ pcall(function()
             end
             return prevReq(opts, ...)
         end
+    end
+end)
+
+-- =========================================================
+-- 💎 TXR 8K CLARITY ENGINE
+-- Roblox draws UI at the device's native resolution, so "8K look" = never stretching a
+-- low-res source. Every avatar thumbnail (48/60/100/150 px sources) is swapped for a
+-- 180/352/420 px one, and every web/banner image is fetched at high resolution, so on
+-- sharp phone / PC screens nothing is upscaled or blurry. Layout & effects are untouched.
+-- =========================================================
+pcall(function()
+    local THUMB_UP = { [48] = 180, [50] = 180, [60] = 180, [75] = 180, [100] = 352, [110] = 352, [150] = 420 }
+
+    local function upgradeThumb(img)
+        local s = img.Image
+        if type(s) ~= "string" or s:sub(1, 11) ~= "rbxthumb://" then return end
+        local ty, id, w, h = s:match("^rbxthumb://type=(%w+)&id=(%d+)&w=(%d+)&h=(%d+)$")
+        if not ty then return end
+        if ty ~= "AvatarHeadShot" and ty ~= "Avatar" and ty ~= "AvatarBust" then return end
+        local nw = THUMB_UP[tonumber(w)]
+        if nw and tonumber(h) == tonumber(w) then
+            img.Image = string.format("rbxthumb://type=%s&id=%s&w=%d&h=%d", ty, id, nw, nw)
+        end
+    end
+
+    local hooked = setmetatable({}, { __mode = "k" })
+    local function hook(img)
+        if hooked[img] then return end
+        hooked[img] = true
+        pcall(upgradeThumb, img)
+        img:GetPropertyChangedSignal("Image"):Connect(function()
+            pcall(upgradeThumb, img)
+        end)
+    end
+    local function consider(d)
+        if d:IsA("ImageLabel") or d:IsA("ImageButton") then hook(d) end
+    end
+
+    UI.gui.DescendantAdded:Connect(consider)
+    task.spawn(function()
+        local n = 0
+        for _, d in ipairs(UI.gui:GetDescendants()) do
+            consider(d)
+            n = n + 1
+            if n % 400 == 0 then task.wait() end
+        end
+    end)
+
+    -- High-resolution web images (banners / default avatars served by unsplash)
+    local origLoadWebImageAsync = loadWebImageAsync
+    local function hiRes(u)
+        if type(u) ~= "string" or not u:find("images.unsplash.com", 1, true) then return u end
+        local w = tonumber(u:match("[?&]w=(%d+)"))
+        if not w or w >= 1200 then return u end
+        local nw = (w <= 240) and 480 or ((w <= 300) and 720 or 1280)
+        u = (u:gsub("([?&]w=)%d+", "%1" .. nw))
+        u = (u:gsub("([?&]q=)%d+", "%1" .. 95))
+        return u
+    end
+    loadWebImageAsync = function(imgUrl, targetImageObj, onLoaded)
+        return origLoadWebImageAsync(hiRes(imgUrl), targetImageObj, onLoaded)
     end
 end)
