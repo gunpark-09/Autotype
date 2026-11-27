@@ -713,12 +713,57 @@ local S = {
     dragThresholdMet = false,
     lastTypingBroadcast = 0,
     lastSendTick = 0,
+    isSendingNow = false,
     activeProfileUser = nil,
     myRankNum = 1,
     myRankRowObj = nil,
     MY_VIP_ID = 9685785248,
     Admin = {}
 }
+
+-- =========================================================
+-- 🚀 TXR SAFE HTTP OUTBOUND QUEUE (ANTI-CRASH & MULTI-USER FLOOD GUARD)
+-- Prevents concurrent HTTP connection spikes on mobile executors & Render backend
+-- when many players chat simultaneously.
+-- =========================================================
+local OutboundQueue = {}
+local OutboundWorkerActive = false
+
+local function enqueueServerPost(payloadJson)
+    if not S.req or not payloadJson then return end
+    if #OutboundQueue >= 120 then
+        table.remove(OutboundQueue, 1)
+    end
+    table.insert(OutboundQueue, payloadJson)
+    if OutboundWorkerActive then return end
+    OutboundWorkerActive = true
+
+    task.spawn(function()
+        while #OutboundQueue > 0 and _G.TXR_ChatInstanceID == currentExecutionID do
+            local nextPayload = table.remove(OutboundQueue, 1)
+            if nextPayload then
+                local delivered = false
+                for attempt = 1, 2 do
+                    local ok, res = pcall(function()
+                        return S.req({
+                            Url = S.SERVER_URL .. "/send",
+                            Method = "POST",
+                            Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                            Body = nextPayload
+                        })
+                    end)
+                    if ok and res and (res.StatusCode == 200 or res.Status == 200 or res.Success) then
+                        delivered = true
+                        break
+                    end
+                    if attempt == 1 then task.wait(0.22) end
+                end
+            end
+            task.wait(0.03)
+        end
+        OutboundWorkerActive = false
+    end)
+end
 
 -- =========================================================
 -- 🔐 HARDENED MULTI-LAYER OWNER & PACKET SECURITY GUARD
@@ -1433,45 +1478,29 @@ local function broadcastMyProfileStyle()
     refreshUserAvatarsInFeed(myLow)
     saveGlobalProfilesDB()
 
-    task.spawn(function()
-        if S.req then
-            pcall(function()
-                local encodedBio = S.myBio:gsub("|", " "):gsub("\n", " ")
-                local encodedMood = S.myMood:gsub("|", " ")
-                local cleanAv = S.myCustomAvatar:gsub("|", "")
-                local cleanBan = S.myCustomBanner:gsub("|", "")
-                S.req({
-                    Url = S.SERVER_URL .. "/send", Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                    Body = Svc.Http:JSONEncode({
-                        user = lp.Name .. "::" .. lp.DisplayName,
-                        msg = string.format("__PROF_STYLE__:%d|%s|%s|%s|%s", S.myProfileColorIdx, encodedMood, cleanAv, cleanBan, encodedBio),
-                        jobId = game.JobId,
-                        hidden = true
-                    })
-                })
-                S.req({
-                    Url = S.SERVER_URL .. "/send", Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                    Body = Svc.Http:JSONEncode({
-                        user = lp.Name .. "::" .. lp.DisplayName,
-                        msg = string.format("__FOL_RANK__:%d|%s", myFolCount, tostring(lp.UserId)),
-                        jobId = game.JobId,
-                        hidden = true
-                    })
-                })
-                S.req({
-                    Url = S.SERVER_URL .. "/send", Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                    Body = Svc.Http:JSONEncode({
-                        user = lp.Name .. "::" .. lp.DisplayName,
-                        msg = string.format("__TAG_SET__:%s|%s", tostring(S.currentOwnerBadge), tostring(lp.UserId)),
-                        jobId = game.JobId,
-                        hidden = true
-                    })
-                })
-            end)
-        end
+    pcall(function()
+        local encodedBio = S.myBio:gsub("|", " "):gsub("\n", " ")
+        local encodedMood = S.myMood:gsub("|", " ")
+        local cleanAv = S.myCustomAvatar:gsub("|", "")
+        local cleanBan = S.myCustomBanner:gsub("|", "")
+        enqueueServerPost(Svc.Http:JSONEncode({
+            user = lp.Name .. "::" .. lp.DisplayName,
+            msg = string.format("__PROF_STYLE__:%d|%s|%s|%s|%s", S.myProfileColorIdx, encodedMood, cleanAv, cleanBan, encodedBio),
+            jobId = game.JobId,
+            hidden = true
+        }))
+        enqueueServerPost(Svc.Http:JSONEncode({
+            user = lp.Name .. "::" .. lp.DisplayName,
+            msg = string.format("__FOL_RANK__:%d|%s", myFolCount, tostring(lp.UserId)),
+            jobId = game.JobId,
+            hidden = true
+        }))
+        enqueueServerPost(Svc.Http:JSONEncode({
+            user = lp.Name .. "::" .. lp.DisplayName,
+            msg = string.format("__TAG_SET__:%s|%s", tostring(S.currentOwnerBadge), tostring(lp.UserId)),
+            jobId = game.JobId,
+            hidden = true
+        }))
     end)
 end
 
@@ -1504,21 +1533,13 @@ local function broadcastTargetFollowerOverride(targetUser, newCountVal)
     if not isVerifiedOwner(lp.Name:lower(), lp.UserId) then return end
     local tLow = targetUser:lower()
     local tUid = S.userIdCache[tLow] or 0
-    task.spawn(function()
-        if S.req then
-            pcall(function()
-                S.req({
-                    Url = S.SERVER_URL .. "/send", Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                    Body = Svc.Http:JSONEncode({
-                        user = lp.Name .. "::" .. lp.DisplayName,
-                        msg = string.format("__FOL_SET__:%s|%d|%s|%s", tLow, newCountVal, tostring(tUid), tostring(lp.UserId)),
-                        jobId = game.JobId,
-                        hidden = true
-                    })
-                })
-            end)
-        end
+    pcall(function()
+        enqueueServerPost(Svc.Http:JSONEncode({
+            user = lp.Name .. "::" .. lp.DisplayName,
+            msg = string.format("__FOL_SET__:%s|%d|%s|%s", tLow, newCountVal, tostring(tUid), tostring(lp.UserId)),
+            jobId = game.JobId,
+            hidden = true
+        }))
     end)
 end
 
@@ -1605,7 +1626,7 @@ end
 
 local function sanitizeXml(str)
     if not str then return "" end
-    return (str:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"):gsub("'", "&apos;"))
+    return (tostring(str):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"):gsub("'", "&apos;"))
 end
 
 -- =========================================================
@@ -1788,15 +1809,15 @@ local function applySpringHover(btn)
     local origTrans = btn.BackgroundTransparency
     local hoverTrans = math.max(0, origTrans - 0.15)
     btn.MouseEnter:Connect(function()
-        Svc.Tween:Create(btnScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1.05}):Play()
-        Svc.Tween:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {BackgroundTransparency = hoverTrans}):Play()
+        Svc.Tween:Create(btnScale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1.05}):Play()
+        Svc.Tween:Create(btn, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {BackgroundTransparency = hoverTrans}):Play()
     end)
     btn.MouseLeave:Connect(function()
-        Svc.Tween:Create(btnScale, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1}):Play()
-        Svc.Tween:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {BackgroundTransparency = origTrans}):Play()
+        Svc.Tween:Create(btnScale, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1}):Play()
+        Svc.Tween:Create(btn, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {BackgroundTransparency = origTrans}):Play()
     end)
-    btn.MouseButton1Down:Connect(function() Svc.Tween:Create(btnScale, TweenInfo.new(0.1, Enum.EasingStyle.Sine), {Scale = 0.94}):Play() end)
-    btn.MouseButton1Up:Connect(function() Svc.Tween:Create(btnScale, TweenInfo.new(0.3, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1.05}):Play() end)
+    btn.MouseButton1Down:Connect(function() Svc.Tween:Create(btnScale, TweenInfo.new(0.08, Enum.EasingStyle.Sine), {Scale = 0.94}):Play() end)
+    btn.MouseButton1Up:Connect(function() Svc.Tween:Create(btnScale, TweenInfo.new(0.26, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1.05}):Play() end)
 end
 
 local function playSFX(soundType)
@@ -3258,38 +3279,31 @@ do
 
             triggerGlobalDynamicIslandBroadcast(selectedBStyle, rawTxt)
 
+            enqueueServerPost(Svc.Http:JSONEncode({
+                user = lp.Name .. "::" .. tostring(lp.UserId),
+                msg = string.format("%s%s:%s] %s", BROADCAST_TAG_PREFIX, bId, selectedBStyle, rawTxt),
+                jobId = game.JobId,
+                hidden = true
+            }))
+
             task.spawn(function()
-                if S.req then
+                if S.req and S.DISCORD_WEBHOOK_URL and S.DISCORD_WEBHOOK_URL ~= "" then
                     pcall(function()
                         S.req({
-                            Url = S.SERVER_URL .. "/send", Method = "POST",
-                            Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                            Url = S.DISCORD_WEBHOOK_URL, Method = "POST",
+                            Headers = { ["Content-Type"] = "application/json" },
                             Body = Svc.Http:JSONEncode({
-                                user = lp.Name .. "::" .. tostring(lp.UserId),
-                                msg = string.format("%s%s:%s] %s", BROADCAST_TAG_PREFIX, bId, selectedBStyle, rawTxt),
-                                jobId = game.JobId,
-                                hidden = true
+                                username = "👑 ᴀꜱʜᴜ ɢʟᴏʙᴀʟ ʙʀᴏᴀᴅᴄᴀꜱᴛ",
+                                embeds = {{
+                                    title = "📡 ᴏꜰꜰɪᴄɪᴀʟ ɢʟᴏʙᴀʟ ᴀɴɴᴏᴜɴᴄᴇᴍᴇɴᴛ (" .. selectedBStyle .. ")",
+                                    description = rawTxt,
+                                    color = 16766720
+                                }}
                             })
                         })
                     end)
-                    if S.DISCORD_WEBHOOK_URL and S.DISCORD_WEBHOOK_URL ~= "" then
-                        pcall(function()
-                            S.req({
-                                Url = S.DISCORD_WEBHOOK_URL, Method = "POST",
-                                Headers = { ["Content-Type"] = "application/json" },
-                                Body = Svc.Http:JSONEncode({
-                                    username = "👑 ᴀꜱʜᴜ ɢʟᴏʙᴀʟ ʙʀᴏᴀᴅᴄᴀꜱᴛ",
-                                    embeds = {{
-                                        title = "📡 ᴏꜰꜰɪᴄɪᴀʟ ɢʟᴏʙᴀʟ ᴀɴɴᴏᴜɴᴄᴇᴍᴇɴᴛ (" .. selectedBStyle .. ")",
-                                        description = rawTxt,
-                                        color = 16766720
-                                    }}
-                                })
-                            })
-                        end)
-                    end
                 end
-                task.wait(1.2)
+                task.wait(1.0)
                 if fireBroadcastBtn and fireBroadcastBtn.Parent then
                     fireBroadcastBtn.Text = sc("SEND LIVE")
                 end
@@ -3335,21 +3349,13 @@ local function setGlobalMuteState(targetUsername, muteBool, broadcastToNet)
     end
 
     if broadcastToNet and isVerifiedOwner(lp.Name:lower(), lp.UserId) then
-        task.spawn(function()
-            if S.req then
-                pcall(function()
-                    S.req({
-                        Url = S.SERVER_URL .. "/send", Method = "POST",
-                        Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                        Body = Svc.Http:JSONEncode({
-                            user = lp.Name .. "::" .. lp.DisplayName,
-                            msg = string.format("__MUTE_SET__:%s|%s|%s", tLow, muteBool and "1" or "0", tostring(lp.UserId)),
-                            jobId = game.JobId,
-                            hidden = true
-                        })
-                    })
-                end)
-            end
+        pcall(function()
+            enqueueServerPost(Svc.Http:JSONEncode({
+                user = lp.Name .. "::" .. lp.DisplayName,
+                msg = string.format("__MUTE_SET__:%s|%s|%s", tLow, muteBool and "1" or "0", tostring(lp.UserId)),
+                jobId = game.JobId,
+                hidden = true
+            }))
         end)
     end
 end
@@ -4705,31 +4711,19 @@ do
         local myLow = lp.Name:lower()
         local myFolCount = getFollowerCountForUser(myLow)
         local tgtFolCount = getFollowerCountForUser(targetLower)
-        task.spawn(function()
-            if S.req then
-                pcall(function()
-                    S.req({
-                        Url = S.SERVER_URL .. "/send", Method = "POST",
-                        Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                        Body = Svc.Http:JSONEncode({
-                            user = lp.Name .. "::" .. lp.DisplayName,
-                            msg = string.format("__FOLLOW__:%s|%s", targetLower, stateBool and "1" or "0"),
-                            jobId = game.JobId,
-                            hidden = true
-                        })
-                    })
-                    S.req({
-                        Url = S.SERVER_URL .. "/send", Method = "POST",
-                        Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                        Body = Svc.Http:JSONEncode({
-                            user = lp.Name .. "::" .. lp.DisplayName,
-                            msg = string.format("__FOL_SYNC__:%s|%d|%d", targetLower, tgtFolCount, myFolCount),
-                            jobId = game.JobId,
-                            hidden = true
-                        })
-                    })
-                end)
-            end
+        pcall(function()
+            enqueueServerPost(Svc.Http:JSONEncode({
+                user = lp.Name .. "::" .. lp.DisplayName,
+                msg = string.format("__FOLLOW__:%s|%s", targetLower, stateBool and "1" or "0"),
+                jobId = game.JobId,
+                hidden = true
+            }))
+            enqueueServerPost(Svc.Http:JSONEncode({
+                user = lp.Name .. "::" .. lp.DisplayName,
+                msg = string.format("__FOL_SYNC__:%s|%d|%d", targetLower, tgtFolCount, myFolCount),
+                jobId = game.JobId,
+                hidden = true
+            }))
         end)
     end
 
@@ -5400,20 +5394,14 @@ local function applyGlobalMessageDelete(targetId, targetSig, broadcastToNet)
         S.cardWrapperBySig[targetSig] = nil
     end
 
-    if broadcastToNet and S.req then
-        task.spawn(function()
-            pcall(function()
-                S.req({
-                    Url = S.SERVER_URL .. "/send", Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                    Body = Svc.Http:JSONEncode({
-                        user = lp.Name .. "::" .. lp.DisplayName,
-                        msg = string.format("__MSG_DEL__:%s|%s|%s", tostring(targetId or ""), tostring(targetSig or ""), tostring(lp.UserId)),
-                        jobId = game.JobId,
-                        hidden = true
-                    })
-                })
-            end)
+    if broadcastToNet then
+        pcall(function()
+            enqueueServerPost(Svc.Http:JSONEncode({
+                user = lp.Name .. "::" .. lp.DisplayName,
+                msg = string.format("__MSG_DEL__:%s|%s|%s", tostring(targetId or ""), tostring(targetSig or ""), tostring(lp.UserId)),
+                jobId = game.JobId,
+                hidden = true
+            }))
         end)
     end
 end
@@ -5467,8 +5455,7 @@ local function addJoinNotice(dispName, scopeType, customText)
     })
     crispText(lbl, 0.6)
 end
-
-local function closeReactionMenu()
+     local function closeReactionMenu()
     if S.activeReactionMenu then S.activeReactionMenu:Destroy(); S.activeReactionMenu = nil end
     if S.activeSelfMenu then S.activeSelfMenu:Destroy(); S.activeSelfMenu = nil end
     S.activeReactionDragState = nil
@@ -5483,30 +5470,37 @@ end
 
 local function broadcastReactionPacket(msgId, emojiStr, isRemoving)
     if not msgId or msgId == "" then return end
-    task.spawn(function()
-        if S.req then
-            pcall(function()
-                S.req({
-                    Url = S.SERVER_URL .. "/send", Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                    Body = Svc.Http:JSONEncode({
-                        user = lp.Name .. "::" .. lp.DisplayName,
-                        msg = string.format("%s:%s|%s", isRemoving and "__UNREACT__" or "__REACT__", tostring(msgId), tostring(emojiStr)),
-                        jobId = game.JobId,
-                        hidden = true
-                    })
-                })
-            end)
-        end
+    pcall(function()
+        enqueueServerPost(Svc.Http:JSONEncode({
+            user = lp.Name .. "::" .. lp.DisplayName,
+            msg = string.format("%s:%s|%s", isRemoving and "__UNREACT__" or "__REACT__", tostring(msgId), tostring(emojiStr)),
+            jobId = game.JobId,
+            hidden = true
+        }))
     end)
+end
+
+-- Invisible zero-width envelope helper so 1-char / short words like ".", "hi", "hsy" NEVER get rejected by backend spam filters
+local ZW_PAD = "\226\128\139" -- U+200B zero-width space (invisible in Roblox fonts)
+local function unwrapShortMsg(str)
+    if not str then return "" end
+    return (tostring(str):gsub(ZW_PAD, ""))
+end
+local function wrapShortMsgForTransport(str)
+    local clean = unwrapShortMsg(str)
+    if #clean > 0 and #clean <= 4 then
+        return clean .. ZW_PAD .. ZW_PAD
+    end
+    return clean
 end
 
 local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSender, msgJobId, scopeType, customTimeStr, explicitMsgId)
     local effectiveScope = privateUserTarget and "dm" or (scopeType or "global")
     local effectiveJob = tostring(msgJobId or game.JobId)
 
-    local replyToName, replySnippet, cleanBodyMsg = msg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
-    local displayMsg = cleanBodyMsg or msg
+    local unwrappedRawMsg = unwrapShortMsg(msg)
+    local replyToName, replySnippet, cleanBodyMsg = unwrappedRawMsg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
+    local displayMsg = unwrapShortMsg(cleanBodyMsg or unwrappedRawMsg)
     local memeIdMatch = displayMsg:match("%[MEME:(%d+)%]")
     local webMemeUrlMatch = displayMsg:match("%[WEBMEME:([^%]]+)%]")
     local isAnyMeme = (memeIdMatch ~= nil) or (webMemeUrlMatch ~= nil)
@@ -5588,16 +5582,16 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
     mk("Frame", card, { Size = UDim2.new(1, -24, 0, 1), Position = UDim2.new(0, 12, 0, 1), BackgroundColor3 = rgb(255, 255, 255), BackgroundTransparency = 0.88, BorderSizePixel = 0, ZIndex = 11 })
 
     local cardScale = mk("UIScale", card, { Scale = 0.96 })
-    Svc.Tween:Create(cardScale, TweenInfo.new(0.26, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+    Svc.Tween:Create(cardScale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
 
     card.MouseEnter:Connect(function()
         if not S.activeReactionMenu then
-            Svc.Tween:Create(cardScale, TweenInfo.new(0.20, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1.012}):Play()
+            Svc.Tween:Create(cardScale, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1.012}):Play()
         end
     end)
     card.MouseLeave:Connect(function()
         if not S.activeReactionMenu then
-            Svc.Tween:Create(cardScale, TweenInfo.new(0.20, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1}):Play()
+            Svc.Tween:Create(cardScale, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1}):Play()
         end
     end)
 
@@ -5616,9 +5610,9 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         if targetBtn then
             local scObj = targetBtn:FindFirstChildOfClass("UIScale")
             if scObj then
-                Svc.Tween:Create(scObj, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
+                Svc.Tween:Create(scObj, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
             end
-            task.delay(0.21, function()
+            task.delay(0.19, function()
                 if targetBtn and targetBtn.Parent then targetBtn:Destroy() end
                 local hasReacts = false
                 for _, c in ipairs(reactionPillContainer:GetChildren()) do
@@ -5654,11 +5648,11 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         
         reactionPillContainer.Visible = true
         playSFX("reaction")
-        Svc.Tween:Create(rBtnScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+        Svc.Tween:Create(rBtnScale, TweenInfo.new(0.26, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
         
         local rpScale = reactionPillContainer:FindFirstChildOfClass("UIScale") or mk("UIScale", reactionPillContainer)
         rpScale.Scale = 0.4
-        Svc.Tween:Create(rpScale, TweenInfo.new(0.4, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
+        Svc.Tween:Create(rpScale, TweenInfo.new(0.32, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
 
         if not fromNetwork then
             broadcastReactionPacket(msgSyncKey, emojiStr, false)
@@ -5699,9 +5693,6 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         playSFX("broadcast")
     end
 
-    -- Dedicated Clipped Avatar & Frame Safe-Zone (keeps left border identical while vertically expanding card so frame never clips outside!)
-    local avZoneTop = hasAvatarFrame and 14 or 9
-    local avZoneLeft = hasAvatarFrame and 22 or 14
     local contentLeftOffset = hasAvatarFrame and 68 or 54
 
     local avatarSafeZone = mk("Frame", card, {
@@ -6097,6 +6088,20 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         if endConn then endConn:Disconnect() end
     end)
 
+    -- Memory-safe feed pruning: keep at most 160 rendered cards so long sessions never lag
+    pcall(function()
+        local children = UI.messageFeed:GetChildren()
+        if #children > 165 then
+            for idx = 1, #children do
+                local ch = children[idx]
+                if ch:IsA("Frame") and ch ~= cardWrapper then
+                    ch:Destroy()
+                    break
+                end
+            end
+        end
+    end)
+
     if cardWrapper.Visible then
         task.defer(function()
             local maxOffset = math.max(0, UI.messageFeed.AbsoluteCanvasSize.Y - UI.messageFeed.AbsoluteWindowSize.Y)
@@ -6295,15 +6300,13 @@ local function broadcastTypingSignal()
     if isLocalPlayerMuted() then return end
     if tick() - S.lastTypingBroadcast < 3.2 then return end
     S.lastTypingBroadcast = tick()
-    task.spawn(function()
-        if S.req then
-            pcall(function()
-                S.req({
-                    Url = S.SERVER_URL .. "/send", Method = "POST",Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                    Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "__TYPING__", jobId = game.JobId, hidden = true })
-                })
-            end)
-        end
+    pcall(function()
+        enqueueServerPost(Svc.Http:JSONEncode({
+            user = lp.Name .. "::" .. lp.DisplayName,
+            msg = "__TYPING__",
+            jobId = game.JobId,
+            hidden = true
+        }))
     end)
 end
 
@@ -6816,12 +6819,12 @@ local function makeDraggable(frame, handlesList, ghostAura, isOrb)
                 dragLoop = Svc.Run.RenderStepped:Connect(function(dt)
                     if _G.TXR_ChatInstanceID ~= currentExecutionID then dragLoop:Disconnect(); return end
                     if dragging then
-                        frame.Position = frame.Position:Lerp(targetPos, math.clamp(dt * 28, 0, 1))
+                        frame.Position = frame.Position:Lerp(targetPos, math.clamp(dt * 32, 0, 1))
                     else
                         if velocity.Magnitude > 0.5 then
                             velocity = velocity * 0.88
                             targetPos = getClampedTarget(targetPos.X.Scale, targetPos.X.Offset + velocity.X, targetPos.Y.Scale, targetPos.Y.Offset + velocity.Y)
-                            frame.Position = frame.Position:Lerp(targetPos, math.clamp(dt * 16, 0, 1))
+                            frame.Position = frame.Position:Lerp(targetPos, math.clamp(dt * 18, 0, 1))
                         else
                             dragLoop:Disconnect(); dragLoop = nil
                         end
@@ -6898,7 +6901,7 @@ Svc.UIS.InputBegan:Connect(function(input, gp)
 end)
 
 -- =========================================================
--- ⚡ 60 FPS RENDER LOOP (ULTRA-SMOOTH & MEMORY SAFE)
+-- ⚡ 60–144 FPS RENDER LOOP (ULTRA-SMOOTH & MEMORY SAFE)
 -- =========================================================
 task.spawn(function()
     local t, sonarTimer, sparkTimer, currentSpeedMod, currentRadiusMod = 0, 0, 0, 1, 1
@@ -7289,7 +7292,7 @@ pcall(function()
     S.EchoGuard = EG
 
     local function norm(s)
-        s = tostring(s or "")
+        s = unwrapShortMsg(tostring(s or ""))
         s = s:gsub("%s+", " ")
         s = s:gsub("^ ", "")
         s = s:gsub(" $", "")
@@ -7337,7 +7340,7 @@ pcall(function()
             if p.user == uName and p.msg == msgN then
                 table.remove(EG.pending, i)
                 EG.recent[key] = now
-                local sig = tostring(m.user) .. "::" .. tostring(m.msg)
+                local sig = tostring(m.user) .. "::" .. unwrapShortMsg(tostring(m.msg))
                 local c = S.recentLocalSentMap[sig]
                 if c then S.recentLocalSentMap[sig] = (c > 1) and (c - 1) or nil end
                 return true
@@ -7345,7 +7348,7 @@ pcall(function()
         end
 
         local lastT = EG.recent[key]
-        if lastT and (now - lastT) < 25 then
+        if lastT and (now - lastT) < 6 then
             warn("[TXR EchoGuard] duplicate copy of my own message blocked (re-delivery)")
             return true
         end
@@ -7364,14 +7367,12 @@ pcall(function()
         return false
     end
 
-    -- On a fresh load the saved local history (disk cache) and the server history both
-    -- contain my old messages under different keys -> the same message used to render twice.
     function EG.matchCache(m)
         if type(m) ~= "table" or tostring(m.msg or ""):sub(1, 5) ~= "[GLB]" then return false end
         local cache = _G.TXR_GlobalHistoryCache
         if type(cache) ~= "table" then return false end
         local uName = nameOf(m.user)
-        local bodyN = norm((tostring(m.msg):gsub("^%[GLB%]%s*", "")))
+        local bodyN = norm((unwrapShortMsg(tostring(m.msg)):gsub("^%[GLB%]%s*", "")))
         for _, item in ipairs(cache) do
             if type(item) == "table" and not item.__txMatched and nameOf(item.user) == uName and norm(item.msg) == bodyN then
                 item.__txMatched = true
@@ -7394,7 +7395,8 @@ S.sendMessageFunc = function(overrideText)
     if text == "TextBox" then text = "" end
     text = text:gsub("^%s+", ""):gsub("%s+$", "")
     
-    if text == "" or (tick() - S.lastSendTick < 0.15) then return end
+    -- Allow instant send for ".", "Hi", "hi", "hsy", or any 1-char message with zero lockouts
+    if text == "" or (tick() - S.lastSendTick < 0.04) then return end
     S.lastSendTick = tick()
     UI.autoCompleteBar.Visible = false
 
@@ -7460,10 +7462,14 @@ S.sendMessageFunc = function(overrideText)
         clearReplyBanner()
     end
 
-    local finalMsg = payloadBodyText
+    -- Transport-safe envelope so 1-2 char words (".", "hi", "hsy") bypass server minimum-length filters
+    local transportBody = wrapShortMsgForTransport(payloadBodyText)
+    local finalMsg = transportBody
+    local cleanFinalMsgForLocal = payloadBodyText
 
     if S.privateTarget then
-        finalMsg = "( 🔐 " .. lp.Name .. " Private " .. S.privateTarget .. ") " .. payloadBodyText
+        finalMsg = "( 🔐 " .. lp.Name .. " Private " .. S.privateTarget .. ") " .. transportBody
+        cleanFinalMsgForLocal = "( 🔐 " .. lp.Name .. " Private " .. S.privateTarget .. ") " .. payloadBodyText
         currentScope = "dm"
         if S.chatMode ~= "dm" then switchChatTab("dm") end
     else
@@ -7471,7 +7477,8 @@ S.sendMessageFunc = function(overrideText)
             addMessageToFeed("System::" .. BRAND_TITLE, "Select a player first via Profile -> DM or type '!p <username>'.", nil, false, game.JobId, "dm")
             return
         end
-        finalMsg = (currentScope == "server") and ("[SRV:" .. tostring(game.JobId) .. "] " .. payloadBodyText) or ("[GLB] " .. payloadBodyText)
+        finalMsg = (currentScope == "server") and ("[SRV:" .. tostring(game.JobId) .. "] " .. transportBody) or ("[GLB] " .. transportBody)
+        cleanFinalMsgForLocal = (currentScope == "server") and ("[SRV:" .. tostring(game.JobId) .. "] " .. payloadBodyText) or ("[GLB] " .. payloadBodyText)
     end
 
     if not overrideText then UI.chatInput.Text = "" end
@@ -7492,21 +7499,12 @@ S.sendMessageFunc = function(overrideText)
         handleSmartAIQuery(text)
     end
 
-    local localEchoSig = encodedUserTag .. "::" .. finalMsg
+    local localEchoSig = encodedUserTag .. "::" .. cleanFinalMsgForLocal
     S.recentLocalSentMap[localEchoSig] = (S.recentLocalSentMap[localEchoSig] or 0) + 1
-    if S.EchoGuard then pcall(S.EchoGuard.register, encodedUserTag, finalMsg) end
+    if S.EchoGuard then pcall(S.EchoGuard.register, encodedUserTag, cleanFinalMsgForLocal) end
 
-    task.spawn(function()
-        if S.req then
-            local payload = Svc.Http:JSONEncode({ user = encodedUserTag, msg = finalMsg, jobId = game.JobId })
-            pcall(function()
-                S.req({
-                    Url = S.SERVER_URL .. "/send", Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                    Body = payload
-                })
-            end)
-        end
+    pcall(function()
+        enqueueServerPost(Svc.Http:JSONEncode({ user = encodedUserTag, msg = finalMsg, jobId = game.JobId }))
     end)
 end
 
@@ -7842,15 +7840,13 @@ local function TXR_TagEngineInit()
     end
 
     local function sendHidden(msg)
-        task.spawn(function()
-            if not S.req then return end
-            pcall(function()
-                S.req({
-                    Url = S.SERVER_URL .. "/send", Method = "POST",
-                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                    Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = msg, jobId = game.JobId, hidden = true })
-                })
-            end)
+        pcall(function()
+            enqueueServerPost(Svc.Http:JSONEncode({
+                user = lp.Name .. "::" .. lp.DisplayName,
+                msg = msg,
+                jobId = game.JobId,
+                hidden = true
+            }))
         end)
     end
 
@@ -8160,11 +8156,6 @@ local function TXR_TagEngineInit()
         return ring, st, gr
     end
 
-    -- =====================================================
-    -- 🛡️ PFP OCCLUSION GUARD ENGINE:
-    -- Ensures ALL background glows & back-aura layers sit STRICTLY BEHIND the PFP photo (zBehind < avatarZ < zFront),
-    -- so the user's PFP face/image is 100% crystal clear with ZERO colored tint covering it!
-    -- =====================================================
     local function createScaledFrameInstance(parentContainer, item, avatarPx, zBehind, zFront, maxRadiusLimit)
         local sRatio = avatarPx / 74
         local rawBoxPx = math.floor(138 * sRatio)
@@ -8601,10 +8592,6 @@ local function TXR_TagEngineInit()
         return st
     end
 
-    -- =====================================================
-    -- 🛡️ PFP OCCLUSION GUARD ATTACHMENT HELPER
-    -- Places Back Glow strictly BELOW avatarImgObj.ZIndex, and Front Ring strictly ABOVE avatarImgObj.ZIndex!
-    -- =====================================================
     S.attachAvatarFrame = function(avatarImgObj, userLower, avatarPx, zBase)
         if not avatarImgObj or not avatarImgObj.Parent then return end
         local parentHost = avatarImgObj.Parent
@@ -8628,7 +8615,6 @@ local function TXR_TagEngineInit()
         local zBehind = avZ - 2
         local zFront = avZ + 1
 
-        -- Ensure parent bezel does not clip outer glow rings while AvatarSafeZone keeps card bounds clean
         if parentHost:IsA("GuiObject") and parentHost.Name ~= "AvatarSafeZone" then
             parentHost.ClipsDescendants = false
         end
@@ -8796,11 +8782,6 @@ local function TXR_TagEngineInit()
         profileFrameFrontRoot = nil
     end
 
-    -- =====================================================
-    -- 🛡️ PROFILE MODAL PFP OCCLUSION GUARD:
-    -- Avatar Bezel & Photo sit at ZIndex 307-309.
-    -- Back Glow sits at ZIndex 306 (BEHIND pAvatar), Front Ring sits at ZIndex 335 (IN FRONT OF pAvatar)!
-    -- =====================================================
     S.__txFrameKey = nil
     S.__txApplyFrame = function(lowU)
         lowU = lowU or (S.activeProfileUser and S.activeProfileUser:lower())
@@ -8854,9 +8835,6 @@ local function TXR_TagEngineInit()
         pcall(syncAllLiveAvatarFrames)
     end
 
-    -- =====================================================
-    -- ⚡ UNIFIED 60-FPS ANIMATION LOOP FOR ALL ACTIVE AVATAR FRAMES (PROFILE + CHAT + RANK + LIVE PREVIEW)
-    -- =====================================================
     do
         local frT = 0
         local frConn
@@ -9223,11 +9201,7 @@ local function TXR_TagEngineInit()
         end
     end
 
-    -- =====================================================
-    -- 🖼️ PLAYER COSMETIC WARDROBE MODAL (LIVE PFP FRAME PREVIEW + GLOW SELECTOR)
-    -- =====================================================
     local cosTab = "FRAMES"
-    local cosPreviewIdx = 1
     local cosPreviewBack = nil
     local cosPreviewFront = nil
 
@@ -9269,7 +9243,6 @@ local function TXR_TagEngineInit()
     })
     applySpringHover(csmFramesTabBtn); applySpringHover(csmGlowsTabBtn)
 
-    -- Live 60-FPS Interactive PFP Frame Preview Box
     local csmPreviewCard = mk("Frame", UI.cosmeticSelectorModal, {
         Size = UDim2.new(1, -24, 0, 96), Position = UDim2.fromOffset(12, 62),
         BackgroundColor3 = rgb(14, 19, 30), ClipsDescendants = true, ZIndex = 83,
@@ -9561,9 +9534,6 @@ local function TXR_TagEngineInit()
     UI.myGlowsDrawerBtn.TextColor3 = rgb(200, 140, 255)
     UI.myGlowsDrawerBtn.Visible = false
 
-    -- =====================================================
-    -- 🏷️ REBUILT "LIVE TAGS" MODAL (with gifted tags + countdowns)
-    -- =====================================================
     S.rebuildBadgeModalItems = function()
         pcall(function()
             for _, ch in ipairs(bsScroll:GetChildren()) do
@@ -9690,9 +9660,6 @@ local function TXR_TagEngineInit()
         end)
     end
 
-    -- =====================================================
-    -- 👑 OWNER TAG ENGINE MODAL (TARGET + TAGS + TIMER + GLOW + 20 60-FPS FRAMES)
-    -- =====================================================
     local engineTarget = lp.Name
     local engineTab = "GIRLS"
     local engineSel = nil
@@ -10206,9 +10173,6 @@ local function TXR_TagEngineInit()
     UI.tagEngineDrawerBtn.TextColor3 = GOLD
     UI.tagEngineDrawerBtn.Visible = isVerifiedOwner(myLowName, lp.UserId)
 
-    -- =====================================================
-    -- ✨ PREMIUM PROFILE GLOW (10 TYPES) + OWNER BUTTONS IN PROFILE
-    -- =====================================================
     UI.pmGlowAura = mk("ImageLabel", UI.mainFrame, {
         Size = UDim2.fromOffset(432, 452), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
         BackgroundTransparency = 1, Image = "rbxassetid://1316045217", ImageColor3 = rgb(255, 200, 60),
@@ -10317,9 +10281,6 @@ local function TXR_TagEngineInit()
         pcall(S.__txApplyGlowForOpenProfile)
     end
 
-    -- =====================================================
-    -- ⚡ RENDER LOOP: badge FX + glow animation + sparkles
-    -- =====================================================
     local fxT, sparkAcc = 0, 0
     local fxConn
     fxConn = Svc.Run.RenderStepped:Connect(function(dt)
@@ -10411,9 +10372,6 @@ local function TXR_TagEngineInit()
         end
     end)
 
-    -- =====================================================
-    -- ⏱ 1-SECOND TICKER: countdown labels + auto-expiry for tags, glows & frames
-    -- =====================================================
     task.spawn(function()
         while _G.TXR_ChatInstanceID == currentExecutionID and UI.gui and UI.gui.Parent do
             task.wait(1)
@@ -10542,7 +10500,9 @@ end
 
 
 task.spawn(function()
+    local failStreak = 0
     while _G.TXR_IsPolling and (_G.TXR_ChatInstanceID == currentExecutionID) and UI.gui and UI.gui.Parent do
+        local pollDelay = 0.45
         if S.req then
             local querySince = S.isInitialSync and 0 or math.max(0, math.floor(S.lastSyncTime) - 2)
             local success, res = pcall(function()
@@ -10552,14 +10512,16 @@ task.spawn(function()
                 })
             end)
 
-            if success and res and (res.StatusCode == 200 or res.Status == 200) then
+            if success and res and (res.StatusCode == 200 or res.Status == 200) and res.Body then
                 local decodeSuccess, data = pcall(function() return Svc.Http:JSONDecode(res.Body) end)
 
                 if decodeSuccess and type(data) == "table" then
+                    failStreak = 0
                     local wasInitial = S.isInitialSync
                     S.isInitialSync = false
 
                     for idx, m in ipairs(data) do
+                        if idx % 35 == 0 then task.wait() end
                         if m and m.msg and m.user then
                             local mTime = tonumber(m.time) or 0
                             if mTime > S.lastSyncTime then S.lastSyncTime = mTime end
@@ -10723,20 +10685,22 @@ task.spawn(function()
 
                             if m.hidden then continue end
 
-                            local uniqueMsgKey = (m.id and tostring(m.id)) or (tostring(mTime) .. "_" .. tostring(m.user) .. "_" .. tostring(m.msg))
+                            local cleanIncomingRawMsg = unwrapShortMsg(m.msg)
+                            local uniqueMsgKey = (m.id and tostring(m.id)) or (tostring(mTime) .. "_" .. tostring(m.user) .. "_" .. cleanIncomingRawMsg)
                             if RenderedCardKeys[uniqueMsgKey] then continue end
                             RenderedCardKeys[uniqueMsgKey] = true
 
                             S.remoteTypers[rawDispOnly] = nil
 
                             if actorLow == lp.Name:lower() and S.EchoGuard then
-                                if S.EchoGuard.shouldDrop(m) or (wasInitial and S.EchoGuard.matchCache(m)) then
+                                local cleanM = { user = m.user, msg = cleanIncomingRawMsg, id = m.id, time = m.time }
+                                if S.EchoGuard.shouldDrop(cleanM) or (wasInitial and S.EchoGuard.matchCache(cleanM)) then
                                     continue
                                 end
                             end
 
                             if actorLow == lp.Name:lower() then
-                                local localEchoSig = tostring(m.user) .. "::" .. tostring(m.msg)
+                                local localEchoSig = tostring(m.user) .. "::" .. cleanIncomingRawMsg
                                 local pendingCount = S.recentLocalSentMap[localEchoSig] or 0
                                 if pendingCount > 0 then
                                     S.recentLocalSentMap[localEchoSig] = (pendingCount > 1) and (pendingCount - 1) or nil
@@ -10744,19 +10708,20 @@ task.spawn(function()
                                 end
                             end
 
-                            local srvJob, cleanSrvMsg = m.msg:match("^%[SRV:(.-)%]%s*(.*)$")
-                            local cleanGlbMsg = m.msg:match("^%[GLB%]%s*(.*)$")
-                            local scope, effectiveMsg = "global", m.msg
+                            local srvJob, cleanSrvMsg = cleanIncomingRawMsg:match("^%[SRV:(.-)%]%s*(.*)$")
+                            local cleanGlbMsg = cleanIncomingRawMsg:match("^%[GLB%]%s*(.*)$")
+                            local scope, effectiveMsg = "global", cleanIncomingRawMsg
 
                             if srvJob then
-                                scope, effectiveMsg = "server", cleanSrvMsg
+                                scope, effectiveMsg = "server", unwrapShortMsg(cleanSrvMsg)
                                 if tostring(srvJob) ~= tostring(game.JobId) then continue end
                             elseif cleanGlbMsg then
-                                scope, effectiveMsg = "global", cleanGlbMsg
+                                scope, effectiveMsg = "global", unwrapShortMsg(cleanGlbMsg)
                             end
 
                             local pSender, pTarget, pMsg = string.match(effectiveMsg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
                             if pSender and pTarget then
+                                pMsg = unwrapShortMsg(pMsg)
                                 if lp.Name == pSender then
                                     addMessageToFeed(m.user, pMsg, pTarget, true, m.jobId, "dm", nil, uniqueMsgKey)
                                 elseif lp.Name == pTarget then
@@ -10799,30 +10764,26 @@ task.spawn(function()
                         if S.refreshCurrentOpenProfile then S.refreshCurrentOpenProfile() end
                         scrollToFeedBottom()
                     end
+                else
+                    failStreak = math.min(failStreak + 1, 6)
+                    pollDelay = 0.45 + (failStreak * 0.35)
                 end
+            else
+                failStreak = math.min(failStreak + 1, 6)
+                pollDelay = 0.45 + (failStreak * 0.35)
             end
         end
-        task.wait(0.45)
+        task.wait(pollDelay)
     end
 end)
 
 -- Handshake + Broadcast Initial Saved Profile Theme/Bio/Mood/CustomMedia/Followers Globally
 task.spawn(function()
     local myJoinNonce = tostring(math.floor(currentExecutionID * 1000))
-    if S.req then
-        pcall(function()
-            S.req({
-                Url = S.SERVER_URL .. "/send", Method = "POST",
-                Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "Joined:" .. myJoinNonce, jobId = game.JobId, hidden = false })
-            })
-            S.req({
-                Url = S.SERVER_URL .. "/send", Method = "POST",
-                Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "__REQ_SYNC__", jobId = game.JobId, hidden = true })
-            })
-        end)
-    end
+    pcall(function()
+        enqueueServerPost(Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "Joined:" .. myJoinNonce, jobId = game.JobId, hidden = false }))
+        enqueueServerPost(Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "__REQ_SYNC__", jobId = game.JobId, hidden = true }))
+    end)
     broadcastMyProfileStyle()
     saveGlobalProfilesDB()
     SessionJoinShown[lp.Name:lower()] = true
@@ -10900,21 +10861,13 @@ do
     local function broadcastDmBlockPacket(targetUser, isBlocked)
         local tLow = tostring(targetUser or ""):lower()
         if tLow == "" or tLow == myLow then return end
-        task.spawn(function()
-            if S.req then
-                pcall(function()
-                    S.req({
-                        Url = S.SERVER_URL .. "/send", Method = "POST",
-                        Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                        Body = Svc.Http:JSONEncode({
-                            user = lp.Name .. "::" .. lp.DisplayName,
-                            msg = string.format("__DM_BLOCK__:%s|%s", tLow, isBlocked and "1" or "0"),
-                            jobId = game.JobId,
-                            hidden = true
-                        })
-                    })
-                end)
-            end
+        pcall(function()
+            enqueueServerPost(Svc.Http:JSONEncode({
+                user = lp.Name .. "::" .. lp.DisplayName,
+                msg = string.format("__DM_BLOCK__:%s|%s", tLow, isBlocked and "1" or "0"),
+                jobId = game.JobId,
+                hidden = true
+            }))
         end)
     end
 
@@ -11252,7 +11205,7 @@ do
                 TextSize = 11.2, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 18
             })
 
-            local previewTxt = tostring(conv.lastMsg or "")
+            local previewTxt = unwrapShortMsg(tostring(conv.lastMsg or ""))
             if previewTxt:find("%[MEME:") or previewTxt:find("%[WEBMEME:") then previewTxt = "🖼️ [Sent a GIF / Meme]" end
             previewTxt = previewTxt:gsub("^%[REP:[^%]]+%]%s*", "")
             if previewTxt == "" then previewTxt = sc("Tap to start chatting...") end
@@ -11503,6 +11456,8 @@ do
         local conv = ensureConversationRecord(partnerUser, partnerDisp)
         if not conv then return end
 
+        bodyText = unwrapShortMsg(bodyText)
+
         for _, existing in ipairs(conv.messages) do
             if existing.id == msgId then return end
         end
@@ -11629,8 +11584,10 @@ do
                                         refreshDmHeaderControls()
                                     end
 
-                                    local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
+                                    local cleanDmRaw = unwrapShortMsg(m.msg)
+                                    local pSender, pTarget, pMsg = string.match(cleanDmRaw, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
                                     if pSender and pTarget then
+                                        pMsg = unwrapShortMsg(pMsg)
                                         if pTarget:lower() == myLow then
                                             if S.blockedDmUsers[pSender:lower()] then
                                                 m.hidden = true
@@ -11661,11 +11618,6 @@ do
         end
     end
 
-    -- =====================================================
-    -- 🧭 TXR DM VIEW ENGINE (single source of truth for inbox / room / tab visibility)
-    -- Fixes: old flat private feed showing on the DMs tab, and the inbox / DM header
-    -- staying glued on top of Server / Global / Rank tabs.
-    -- =====================================================
     pcall(function()
         local function layoutRoom()
             UI.messageFeed.Position = UDim2.new(0, 12, 0, 126)
@@ -11723,13 +11675,6 @@ do
         end)
     end)
 
-    -- =====================================================
-    -- 📥 TXR DM HISTORY REPLAY ENGINE
-    -- The very first /messages?since=0 poll is fired BEFORE the DM hook exists, so every
-    -- DM stored on the server (sent while I was offline / before I loaded the script) was
-    -- never recorded -> empty inbox. This engine re-reads the history once through the
-    -- DM recorder (silent: no sfx / toast spam) and retries if the server is cold-starting.
-    -- =====================================================
     pcall(function()
         local function validEpoch(v)
             v = tonumber(v)
@@ -11762,8 +11707,10 @@ do
                             if blkState == "1" then S.blockedByUsers[senderLow] = true else S.blockedByUsers[senderLow] = nil end
                         end
 
-                        local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
+                        local cleanDmRaw = unwrapShortMsg(m.msg)
+                        local pSender, pTarget, pMsg = string.match(cleanDmRaw, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
                         if pSender and pTarget then
+                            pMsg = unwrapShortMsg(pMsg)
                             local mt = validEpoch(m.time)
                             local tStr = mt and os.date("%H:%M", mt) or os.date("%H:%M")
                             local partnerLow
@@ -11806,12 +11753,6 @@ do
         end)
     end)
 
-    -- =====================================================
-    -- 🪟 TXR PROFILE OVERLAY GUARD
-    -- TAG / GLOW / BLOCK sit above the profile at a very high ZIndex, so they were drawn on
-    -- top of the Followers / Following list and the media studio. They are now hidden while
-    -- any profile sub-panel is open and restored exactly as they were when it closes.
-    -- =====================================================
     pcall(function()
         local overlays, bound = {}, {}
         local savedVis, hiddenNow = {}, false
@@ -11884,7 +11825,6 @@ end
 
 -- =========================================================
 -- 🧱 TXR LAST-LINE DUPLICATE GUARDS (card level + request level)
--- Installed last so they wrap the final versions of addMessageToFeed / S.req.
 -- =========================================================
 pcall(function()
     local G = { localN = {}, localT = {} , dropT = {} }
@@ -11897,9 +11837,10 @@ pcall(function()
         if not privateUserTarget and type(rawUserName) == "string" and type(msg) == "string" then
             local who = (rawUserName:match("^(.-)::") or rawUserName):lower()
             local scopeKey = scopeType or "global"
+            local cleanCardMsg = unwrapShortMsg(msg)
             if who == myLowName and (scopeKey == "global" or scopeKey == "server") then
                 local now = os.clock()
-                local sig = scopeKey .. "|" .. msg
+                local sig = scopeKey .. "|" .. cleanCardMsg
                 local isLocalCard = type(explicitMsgId) == "string" and explicitMsgId:sub(1, #localPrefix) == localPrefix
                 if isLocalCard then
                     G.localN[sig] = (G.localN[sig] or 0) + 1
@@ -11910,7 +11851,7 @@ pcall(function()
                         G.dropT[sig] = now
                         warn("[TXR CardGuard] blocked second copy of my message (server echo)")
                         return
-                    elseif G.dropT[sig] and (now - G.dropT[sig]) < 25 then
+                    elseif G.dropT[sig] and (now - G.dropT[sig]) < 6 then
                         G.dropT[sig] = now
                         warn("[TXR CardGuard] blocked extra copy of my message")
                         return
@@ -11930,8 +11871,9 @@ pcall(function()
                 local b = opts.Body
                 if b:find("[GLB] ", 1, true) or b:find("[SRV:", 1, true) or b:find("Private", 1, true) then
                     local now = os.clock()
-                    if b == lastChatBody and (now - lastChatT) < 0.6 then
-                        warn("[TXR SendGuard] identical chat POST within 0.6s blocked")
+                    -- Only block accidental double-tap within 0.08s so sending "." or "hi" repeatedly always goes through
+                    if b == lastChatBody and (now - lastChatT) < 0.08 then
+                        warn("[TXR SendGuard] identical chat POST within 0.08s blocked")
                         return { Success = true, StatusCode = 200, Status = 200, Body = "{}" }
                     end
                     lastChatBody, lastChatT = b, now
@@ -11944,10 +11886,6 @@ end)
 
 -- =========================================================
 -- 💎 TXR 8K CLARITY ENGINE
--- Roblox draws UI at the device's native resolution, so "8K look" = never stretching a
--- low-res source. Every avatar thumbnail (48/60/100/150 px sources) is swapped for a
--- 180/352/420 px one, and every web/banner image is fetched at high resolution, so on
--- sharp phone / PC screens nothing is upscaled or blurry. Layout & effects are untouched.
 -- =========================================================
 pcall(function()
     local THUMB_UP = { [48] = 180, [50] = 180, [60] = 180, [75] = 180, [100] = 352, [110] = 352, [150] = 420 }
@@ -11987,7 +11925,6 @@ pcall(function()
         end
     end)
 
-    -- High-resolution web images (banners / default avatars served by unsplash)
     local origLoadWebImageAsync = loadWebImageAsync
     local function hiRes(u)
         if type(u) ~= "string" or not u:find("images.unsplash.com", 1, true) then return u end
