@@ -2484,6 +2484,19 @@ end)
 UI.actionMenu = mk("Frame", UI.mainFrame, { Size = UDim2.fromOffset(225, 32), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.05, Visible = false, ZIndex = 50, Corner = UDim.new(0, 8), Stroke = { Color = Colors.Primary, Thickness = 1.2, Transparency = 0.4 } })
 mk("UIListLayout", UI.actionMenu, { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 4) })
 
+Svc.UIS.InputBegan:Connect(function(input)
+    if not UI.actionMenu or not UI.actionMenu.Visible then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local pos = input.Position
+        local mPos = UI.actionMenu.AbsolutePosition
+        local mSize = UI.actionMenu.AbsoluteSize
+        local insideMenu = (pos.X >= mPos.X and pos.X <= mPos.X + mSize.X and pos.Y >= mPos.Y and pos.Y <= mPos.Y + mSize.Y)
+        if not insideMenu then
+            UI.actionMenu.Visible = false
+        end
+    end
+end)
+
 local function createActionBtn(text, color, onClick)
     local b = mk("TextButton", UI.actionMenu, { Size = UDim2.new(0, 40, 0, 22), BackgroundColor3 = Colors.Background, Text = sc(text), TextColor3 = color, Font = Enum.Font.GothamBlack, TextSize = 9.0, AutoButtonColor = false, ZIndex = 51, Corner = UDim.new(0, 5) })
     b.MouseButton1Click:Connect(function() UI.actionMenu.Visible = false; pcall(onClick) end)
@@ -5201,6 +5214,92 @@ do
 end
 
 -- =========================================================
+-- 🗑️ GLOBAL DELETE & REACTION SYNC ENGINE (CROSS-ACCOUNT PERSISTENT)
+-- =========================================================
+S.deletedMsgIds = S.deletedMsgIds or {}
+S.deletedMsgSigs = S.deletedMsgSigs or {}
+S.cardWrapperById = S.cardWrapperById or {}
+S.cardWrapperBySig = S.cardWrapperBySig or {}
+S.removedReactionState = S.removedReactionState or {}
+S.DELETE_LOG_FILE = "TXR_DeletedMsgs_DB_V1.json"
+
+pcall(function()
+    if S.isF(S.DELETE_LOG_FILE) then
+        local rawDel = S.readF(S.DELETE_LOG_FILE)
+        local decDel = rawDel and Svc.Http:JSONDecode(rawDel)
+        if type(decDel) == "table" then
+            if type(decDel.ids) == "table" then
+                for k, v in pairs(decDel.ids) do if v then S.deletedMsgIds[k] = true end end
+            end
+            if type(decDel.sigs) == "table" then
+                for k, v in pairs(decDel.sigs) do if v then S.deletedMsgSigs[k] = true end end
+            end
+        end
+    end
+end)
+
+local function saveDeletedMsgsDB()
+    pcall(function()
+        S.writeF(S.DELETE_LOG_FILE, Svc.Http:JSONEncode({
+            ids = S.deletedMsgIds,
+            sigs = S.deletedMsgSigs
+        }))
+    end)
+end
+
+local function purgeMessageFromDiskCache(targetId, targetSig)
+    local changed = false
+    for i = #_G.TXR_GlobalHistoryCache, 1, -1 do
+        local item = _G.TXR_GlobalHistoryCache[i]
+        local itemUser = tostring(item.user or ""):match("^(.-)::") or tostring(item.user or "")
+        local itemSig = itemUser:lower() .. "::" .. tostring(item.msg or "")
+        if (targetId and targetId ~= "" and item.key == targetId) or (targetSig and targetSig ~= "" and itemSig == targetSig) then
+            table.remove(_G.TXR_GlobalHistoryCache, i)
+            changed = true
+        end
+    end
+    if changed then
+        pcall(function() S.writeF(S.GLOBAL_SAVE_FILE, Svc.Http:JSONEncode(_G.TXR_GlobalHistoryCache)) end)
+    end
+end
+
+local function applyGlobalMessageDelete(targetId, targetSig, broadcastToNet)
+    if targetId and targetId ~= "" then S.deletedMsgIds[targetId] = true end
+    if targetSig and targetSig ~= "" then S.deletedMsgSigs[targetSig] = true end
+    saveDeletedMsgsDB()
+    purgeMessageFromDiskCache(targetId, targetSig)
+
+    if targetId and S.cardWrapperById[targetId] then
+        local cw = S.cardWrapperById[targetId]
+        S.cardWrapperById[targetId] = nil
+        if cw and cw.Parent then cw:Destroy() end
+    end
+    if targetSig and S.cardWrapperBySig[targetSig] then
+        for _, cw in ipairs(S.cardWrapperBySig[targetSig]) do
+            if cw and cw.Parent then cw:Destroy() end
+        end
+        S.cardWrapperBySig[targetSig] = nil
+    end
+
+    if broadcastToNet and S.req then
+        task.spawn(function()
+            pcall(function()
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({
+                        user = lp.Name .. "::" .. lp.DisplayName,
+                        msg = string.format("__MSG_DEL__:%s|%s|%s", tostring(targetId or ""), tostring(targetSig or ""), tostring(lp.UserId)),
+                        jobId = game.JobId,
+                        hidden = true
+                    })
+                })
+            end)
+        end)
+    end
+end
+
+-- =========================================================
 -- 💬 MESSAGE PIPELINE (STRICT SAME-SERVER SCRIPT USERS + SMART CONTAINED FRAMES)
 -- =========================================================
 local function updateLiveCounter(username, dispName, packetJobId)
@@ -5263,7 +5362,7 @@ local function closeReactionMenu()
     end
 end
 
-local function broadcastReactionPacket(msgId, emojiStr)
+local function broadcastReactionPacket(msgId, emojiStr, isRemoving)
     if not msgId or msgId == "" then return end
     task.spawn(function()
         if S.req then
@@ -5273,7 +5372,7 @@ local function broadcastReactionPacket(msgId, emojiStr)
                     Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
                     Body = Svc.Http:JSONEncode({
                         user = lp.Name .. "::" .. lp.DisplayName,
-                        msg = string.format("__REACT__:%s|%s", tostring(msgId), tostring(emojiStr)),
+                        msg = string.format("%s:%s|%s", isRemoving and "__UNREACT__" or "__REACT__", tostring(msgId), tostring(emojiStr)),
                         jobId = game.JobId,
                         hidden = true
                     })
@@ -5308,6 +5407,12 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         return
     end
 
+    local msgSyncKey = explicitMsgId or (actualUsername .. "_" .. displayMsg:sub(1, 24))
+    local cleanSigKey = lowUser .. "::" .. tostring(displayMsg)
+    if S.deletedMsgIds[msgSyncKey] or S.deletedMsgSigs[cleanSigKey] then
+        return
+    end
+
     S.userMsgCounts[lowUser] = (S.userMsgCounts[lowUser] or 0) + 1
 
     local isSelf = (lowUser == lp.Name:lower())
@@ -5338,13 +5443,15 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         end
     end
 
-    local msgSyncKey = explicitMsgId or (actualUsername .. "_" .. displayMsg:sub(1, 24))
-
     local cardWrapper = mk("Frame", UI.messageFeed, { Size = isAnyMeme and UDim2.new(1, 0, 0, hasAvatarFrame and 164 or 152) or UDim2.new(1, 0, 0, 0), AutomaticSize = isAnyMeme and Enum.AutomaticSize.None or Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 9 })
     cardWrapper:SetAttribute("ChatScope", effectiveScope)
     cardWrapper:SetAttribute("JobId", effectiveJob)
     cardWrapper:SetAttribute("SearchBlob", dispName .. " " .. actualUsername .. " " .. displayMsg .. (privateUserTarget and (" " .. privateUserTarget) or ""))
     cardWrapper.Visible = (effectiveScope == S.chatMode)
+
+    S.cardWrapperById[msgSyncKey] = cardWrapper
+    S.cardWrapperBySig[cleanSigKey] = S.cardWrapperBySig[cleanSigKey] or {}
+    table.insert(S.cardWrapperBySig[cleanSigKey], cardWrapper)
 
     local swipeCapsule = mk("Frame", cardWrapper, { Size = UDim2.fromOffset(38, 24), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 4, 0.5, 0), BackgroundColor3 = Colors.ActiveTint, BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 8, Corner = UDim.new(1, 0) })
     local scFill = mk("Frame", swipeCapsule, { Size = UDim2.fromScale(0, 1), BackgroundColor3 = Colors.Primary, BackgroundTransparency = 0.70, BorderSizePixel = 0, ZIndex = 8, Corner = UDim.new(1, 0) })
@@ -5383,44 +5490,73 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
     mk("UIPadding", reactionPillContainer, { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) })
     mk("UIListLayout", reactionPillContainer, { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 4) })
     
-    local function addReactionToCard(emojiStr, fromNetwork)
-        local existing = false
-        for _, child in ipairs(reactionPillContainer:GetChildren()) do
-            if child:IsA("TextButton") and child.Name == "React_" .. emojiStr then existing = true; break end
-        end
-        if not existing then
-            local rBtn = mk("TextButton", reactionPillContainer, { Name = "React_" .. emojiStr, Size = UDim2.fromOffset(18, 18), BackgroundTransparency = 1, Text = emojiStr, Font = Enum.Font.SourceSans, TextSize = 16, ZIndex = 51, AutoButtonColor = false })
-            local rBtnScale = mk("UIScale", rBtn, {Scale = 0})
-            
-            reactionPillContainer.Visible = true
-            playSFX("reaction")
-            Svc.Tween:Create(rBtnScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
-            
-            local rpScale = reactionPillContainer:FindFirstChildOfClass("UIScale") or mk("UIScale", reactionPillContainer)
-            rpScale.Scale = 0.4
-            Svc.Tween:Create(rpScale, TweenInfo.new(0.4, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
-
-            if not fromNetwork then
-                broadcastReactionPacket(msgSyncKey, emojiStr)
+    local function removeReactionFromCard(emojiStr, fromNetwork)
+        local rKey = msgSyncKey .. "_" .. emojiStr
+        S.removedReactionState[rKey] = tick()
+        local targetBtn = reactionPillContainer:FindFirstChild("React_" .. emojiStr)
+        if targetBtn then
+            local scObj = targetBtn:FindFirstChildOfClass("UIScale")
+            if scObj then
+                Svc.Tween:Create(scObj, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
             end
-
-            rBtn.MouseButton1Click:Connect(function()
-                playSFX("default")
-                Svc.Tween:Create(rBtnScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
-                task.delay(0.25, function()
-                    if rBtn and rBtn.Parent then rBtn:Destroy() end
-                    local hasReacts = false
-                    for _, c in ipairs(reactionPillContainer:GetChildren()) do
-                        if c:IsA("TextButton") then hasReacts = true; break end
-                    end
-                    if not hasReacts then reactionPillContainer.Visible = false end
-                end)
+            task.delay(0.21, function()
+                if targetBtn and targetBtn.Parent then targetBtn:Destroy() end
+                local hasReacts = false
+                for _, c in ipairs(reactionPillContainer:GetChildren()) do
+                    if c:IsA("TextButton") then hasReacts = true; break end
+                end
+                if not hasReacts then reactionPillContainer.Visible = false end
             end)
+        end
+        if not fromNetwork then
+            broadcastReactionPacket(msgSyncKey, emojiStr, true)
         end
     end
 
-    S.cardReactionHooks[msgSyncKey] = function(em)
-        addReactionToCard(em, true)
+    local function addReactionToCard(emojiStr, fromNetwork)
+        local rKey = msgSyncKey .. "_" .. emojiStr
+        if fromNetwork and S.removedReactionState[rKey] and (tick() - S.removedReactionState[rKey] < 12) then
+            return
+        end
+        if not fromNetwork then
+            S.removedReactionState[rKey] = nil
+        end
+
+        local existing = reactionPillContainer:FindFirstChild("React_" .. emojiStr)
+        if existing then
+            if not fromNetwork then
+                removeReactionFromCard(emojiStr, false)
+            end
+            return
+        end
+
+        local rBtn = mk("TextButton", reactionPillContainer, { Name = "React_" .. emojiStr, Size = UDim2.fromOffset(18, 18), BackgroundTransparency = 1, Text = emojiStr, Font = Enum.Font.SourceSans, TextSize = 16, ZIndex = 51, AutoButtonColor = false })
+        local rBtnScale = mk("UIScale", rBtn, {Scale = 0})
+        
+        reactionPillContainer.Visible = true
+        playSFX("reaction")
+        Svc.Tween:Create(rBtnScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+        
+        local rpScale = reactionPillContainer:FindFirstChildOfClass("UIScale") or mk("UIScale", reactionPillContainer)
+        rpScale.Scale = 0.4
+        Svc.Tween:Create(rpScale, TweenInfo.new(0.4, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
+
+        if not fromNetwork then
+            broadcastReactionPacket(msgSyncKey, emojiStr, false)
+        end
+
+        rBtn.MouseButton1Click:Connect(function()
+            playSFX("default")
+            removeReactionFromCard(emojiStr, false)
+        end)
+    end
+
+    S.cardReactionHooks[msgSyncKey] = function(em, isUnreact)
+        if isUnreact then
+            removeReactionFromCard(em, true)
+        else
+            addReactionToCard(em, true)
+        end
     end
 
     local accentStrip = mk("Frame", card, { Size = UDim2.new(0, 3, 1, -14), Position = UDim2.new(0, 5, 0, 7), BorderSizePixel = 0, BackgroundColor3 = rgb(255, 255, 255), ZIndex = 11, Corner = UDim.new(1, 0) })
@@ -5669,8 +5805,10 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
                             end)
                             delBtn.MouseButton1Click:Connect(function()
                                 closeReactionMenu(); playSFX("default")
-                                Svc.Tween:Create(cardScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
-                                task.delay(0.3, function() cardWrapper:Destroy() end)
+                                Svc.Tween:Create(cardScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
+                                task.delay(0.25, function()
+                                    applyGlobalMessageDelete(msgSyncKey, cleanSigKey, true)
+                                end)
                             end)
                             S.activeSelfMenu = selfMenu
                         else
@@ -5689,8 +5827,10 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
                             })
                             delGifBtn.MouseButton1Click:Connect(function()
                                 closeReactionMenu(); playSFX("default")
-                                Svc.Tween:Create(cardScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
-                                task.delay(0.3, function() cardWrapper:Destroy() end)
+                                Svc.Tween:Create(cardScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
+                                task.delay(0.25, function()
+                                    applyGlobalMessageDelete(msgSyncKey, cleanSigKey, true)
+                                end)
                             end)
                             S.activeSelfMenu = selfGifMenu
                         end
@@ -5814,6 +5954,12 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
                     local isTgtMuted = (S.mutedUsers[lowUser] == true)
                     createActionBtn(isTgtMuted and "UNMT" or "MUTE", isTgtMuted and Colors.OnlineGreen or Colors.Danger, function()
                         setGlobalMuteState(actualUsername, not isTgtMuted, true)
+                    end)
+                end
+                if isVerifiedOwner(lp.Name:lower(), lp.UserId) then
+                    createActionBtn("DEL", Colors.Danger, function()
+                        applyGlobalMessageDelete(msgSyncKey, cleanSigKey, true)
+                        playSFX("default")
                     end)
                 end
                 local cardPos = cardWrapper.AbsolutePosition - UI.mainFrame.AbsolutePosition
@@ -10221,6 +10367,15 @@ task.spawn(function()
                                 continue
                             end
 
+                            local delId, delSig, delUid = m.msg:match("^__MSG_DEL__:([^|]*)|([^|]*)|?(.*)$")
+                            if delId ~= nil or delSig ~= nil then
+                                local sigOwner = delSig and delSig:match("^([^:]+)::") or ""
+                                if actorLow == sigOwner or verifySenderOwnership(actorLow, delUid) then
+                                    applyGlobalMessageDelete(delId, delSig, false)
+                                end
+                                continue
+                            end
+
                             local pThemeIdx, pMoodStr, pAvVal, pBanVal, pBioStr = m.msg:match("^__PROF_STYLE__:(%d+)|([^|]*)|([^|]*)|([^|]*)|(.*)$")
                             if pThemeIdx then
                                 S.userProfiles[actorLow] = {
@@ -10298,7 +10453,13 @@ task.spawn(function()
 
                             local rTargetId, rEmoji = m.msg:match("^__REACT__:([^|]+)|(.*)$")
                             if rTargetId and rEmoji then
-                                if S.cardReactionHooks[rTargetId] then S.cardReactionHooks[rTargetId](rEmoji) end
+                                if S.cardReactionHooks[rTargetId] then S.cardReactionHooks[rTargetId](rEmoji, false) end
+                                continue
+                            end
+
+                            local urTargetId, urEmoji = m.msg:match("^__UNREACT__:([^|]+)|(.*)$")
+                            if urTargetId and urEmoji then
+                                if S.cardReactionHooks[urTargetId] then S.cardReactionHooks[urTargetId](urEmoji, true) end
                                 continue
                             end
 
