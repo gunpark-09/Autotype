@@ -5033,6 +5033,13 @@ do
                 UI.chatInput.Text = "@ai "
             else
                 S.privateTarget = S.activeProfileUser
+                if S.openDmConversationRoom then
+                    local tU = S.activeProfileUser
+                    closeProfileModal()
+                    S.openDmConversationRoom(tU, S.knownDispNames[tU:lower()] or tU)
+                    UI.chatInput:CaptureFocus()
+                    return
+                end
                 if S.updateInputBar then S.updateInputBar() end
                 if S.switchChatTab then S.switchChatTab("dm") end
             end
@@ -5939,6 +5946,10 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
                 end)
                 createActionBtn("DM", Colors.Purple, function()
                     S.privateTarget = actualUsername
+                    if S.openDmConversationRoom then
+                        S.openDmConversationRoom(actualUsername, dispName)
+                        return
+                    end
                     if S.updateInputBar then S.updateInputBar() end
                     if S.switchChatTab then S.switchChatTab("dm") end
                     playSFX("dm")
@@ -10605,3 +10616,801 @@ task.spawn(function()
         saveGlobalProfilesDB()
     end
 end)
+
+-- =========================================================
+-- 💬 WHATSAPP / DISCORD STYLE DM INBOX + 1-ON-1 ROOM + BLOCK ENGINE
+-- =========================================================
+do
+    local myLow = lp.Name:lower()
+    local DM_STORE_FILE = "TXR_WhatsApp_DMs_V1_" .. tostring(lp.UserId) .. ".json"
+
+    S.dmConversations = S.dmConversations or {}
+    S.blockedDmUsers = S.blockedDmUsers or {}
+    S.blockedByUsers = S.blockedByUsers or {}
+    S.activeDmChatUser = nil
+    S.dmSearchQuery = ""
+
+    pcall(function()
+        if S.isF(DM_STORE_FILE) then
+            local raw = S.readF(DM_STORE_FILE)
+            local dec = raw and Svc.Http:JSONDecode(raw)
+            if type(dec) == "table" then
+                if type(dec.convos) == "table" then S.dmConversations = dec.convos end
+                if type(dec.blocked) == "table" then S.blockedDmUsers = dec.blocked end
+                if type(dec.blockedBy) == "table" then S.blockedByUsers = dec.blockedBy end
+            end
+        end
+    end)
+
+    local function saveDmDatabase()
+        pcall(function()
+            for _, conv in pairs(S.dmConversations) do
+                if type(conv.messages) == "table" then
+                    while #conv.messages > 120 do
+                        table.remove(conv.messages, 1)
+                    end
+                end
+            end
+            S.writeF(DM_STORE_FILE, Svc.Http:JSONEncode({
+                convos = S.dmConversations,
+                blocked = S.blockedDmUsers,
+                blockedBy = S.blockedByUsers
+            }))
+        end)
+    end
+
+    local function getTotalUnreadDms()
+        local sum = 0
+        for pLow, conv in pairs(S.dmConversations) do
+            if not S.blockedDmUsers[pLow] then
+                sum += (tonumber(conv.unread) or 0)
+            end
+        end
+        S.unreadDmCount = sum
+        if UI.dmUnreadPill and UI.dmUnreadTxt then
+            UI.dmUnreadTxt.Text = tostring(sum)
+            UI.dmUnreadPill.Visible = (sum > 0 and (S.chatMode ~= "dm" or S.activeDmChatUser == nil))
+        end
+        return sum
+    end
+
+    local function broadcastDmBlockPacket(targetUser, isBlocked)
+        local tLow = tostring(targetUser or ""):lower()
+        if tLow == "" or tLow == myLow then return end
+        task.spawn(function()
+            if S.req then
+                pcall(function()
+                    S.req({
+                        Url = S.SERVER_URL .. "/send", Method = "POST",
+                        Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                        Body = Svc.Http:JSONEncode({
+                            user = lp.Name .. "::" .. lp.DisplayName,
+                            msg = string.format("__DM_BLOCK__:%s|%s", tLow, isBlocked and "1" or "0"),
+                            jobId = game.JobId,
+                            hidden = true
+                        })
+                    })
+                end)
+            end
+        end)
+    end
+
+    for _, ch in ipairs(UI.dmHeaderBar:GetChildren()) do
+        if ch:IsA("GuiObject") then ch:Destroy() end
+    end
+
+    UI.dmHeaderBar.Size = UDim2.new(1, -24, 0, 34)
+    UI.dmHeaderBar.BackgroundColor3 = rgb(16, 21, 34)
+
+    local dmBackBtn = mk("TextButton", UI.dmHeaderBar, {
+        Size = UDim2.fromOffset(58, 22), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 6, 0.5, 0),
+        BackgroundColor3 = rgb(24, 31, 48), Text = "< " .. sc("INBOX"), TextColor3 = Colors.Primary,
+        Font = Enum.Font.GothamBlack, TextSize = 8.6, AutoButtonColor = false, Visible = false, ZIndex = 20,
+        Corner = UDim.new(1, 0), Stroke = { Color = Colors.PrimaryDark, Thickness = 0.9 }
+    })
+    applySpringHover(dmBackBtn)
+
+    local dmHeaderProfileBtn = mk("TextButton", UI.dmHeaderBar, {
+        Size = UDim2.new(1, -148, 1, 0), Position = UDim2.fromOffset(70, 0),
+        BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Visible = false, ZIndex = 20
+    })
+    local dmHdrAv = mk("ImageLabel", dmHeaderProfileBtn, {
+        Size = UDim2.fromOffset(24, 24), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 0, 0.5, 0),
+        BackgroundColor3 = rgb(10, 14, 22), ScaleType = Enum.ScaleType.Crop, ZIndex = 21, Corner = UDim.new(1, 0)
+    })
+    local dmHdrDot = mk("Frame", dmHdrAv, {
+        Size = UDim2.fromOffset(7, 7), AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, 1, 1, 1),
+        BackgroundColor3 = Colors.OnlineGreen, ZIndex = 22, Corner = UDim.new(1, 0), Stroke = { Color = rgb(16, 21, 34), Thickness = 1.5 }
+    })
+    local dmHdrName = mk("TextLabel", dmHeaderProfileBtn, {
+        Size = UDim2.new(1, -30, 0, 15), Position = UDim2.fromOffset(30, 3), BackgroundTransparency = 1,
+        Text = "Player", TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 10.2,
+        TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 21
+    })
+    local dmHdrStatus = mk("TextLabel", dmHeaderProfileBtn, {
+        Size = UDim2.new(1, -30, 0, 12), Position = UDim2.fromOffset(30, 18), BackgroundTransparency = 1,
+        Text = sc("ONLINE • DIRECT MESSAGE"), TextColor3 = Colors.OnlineGreen, Font = Enum.Font.GothamBold, TextSize = 8.0,
+        TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 21
+    })
+
+    local dmBlockToggleBtn = mk("TextButton", UI.dmHeaderBar, {
+        Size = UDim2.fromOffset(68, 22), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0),
+        BackgroundColor3 = rgb(42, 16, 26), Text = "🚫 " .. sc("BLOCK"), TextColor3 = Colors.Danger,
+        Font = Enum.Font.GothamBlack, TextSize = 8.4, AutoButtonColor = false, Visible = false, ZIndex = 21,
+        Corner = UDim.new(1, 0), Stroke = { Color = Colors.Danger, Thickness = 0.9, Transparency = 0.35 }
+    })
+    applySpringHover(dmBlockToggleBtn)
+
+    local dmInboxTitle = mk("TextLabel", UI.dmHeaderBar, {
+        Size = UDim2.new(1, -104, 1, 0), Position = UDim2.fromOffset(12, 0), BackgroundTransparency = 1,
+        RichText = true, Text = "💬 <b>" .. sc("DIRECT MESSAGES") .. "</b>  <font color='#8FA4C4'>• " .. sc("WHATSAPP MODE") .. "</font>",
+        TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBold, TextSize = 9.8,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 20
+    })
+    local dmNewChatBtn = mk("TextButton", UI.dmHeaderBar, {
+        Size = UDim2.fromOffset(82, 22), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0),
+        BackgroundColor3 = Colors.ActiveTint, Text = "+ " .. sc("NEW DM"), TextColor3 = Colors.Primary,
+        Font = Enum.Font.GothamBlack, TextSize = 8.4, AutoButtonColor = false, ZIndex = 20,
+        Corner = UDim.new(1, 0), Stroke = { Color = Colors.Primary, Thickness = 0.9, Transparency = 0.3 }
+    })
+    applySpringHover(dmNewChatBtn)
+
+    UI.dmInboxView = mk("Frame", UI.mainFrame, {
+        Size = UDim2.new(1, -24, 1, -134), Position = UDim2.new(0, 12, 0, 126),
+        BackgroundTransparency = 1, Visible = false, ZIndex = 14
+    })
+
+    local dmSearchBoxWrap = mk("Frame", UI.dmInboxView, {
+        Size = UDim2.new(1, 0, 0, 28), Position = UDim2.fromOffset(0, 0),
+        BackgroundColor3 = rgb(14, 19, 30), ZIndex = 15, Corner = UDim.new(1, 0),
+        Stroke = { Color = Colors.SurfaceHover, Thickness = 1, Transparency = 0.35 }
+    })
+    mk("TextLabel", dmSearchBoxWrap, { Size = UDim2.fromOffset(24, 28), Position = UDim2.fromOffset(6, 0), BackgroundTransparency = 1, Text = "🔍", TextSize = 10, ZIndex = 16 })
+    local dmSearchInput = mk("TextBox", dmSearchBoxWrap, {
+        Size = UDim2.new(1, -34, 1, 0), Position = UDim2.fromOffset(28, 0), BackgroundTransparency = 1,
+        Text = "", PlaceholderText = sc("Search chats or type @username to start DM..."),
+        PlaceholderColor3 = Colors.SubText, TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamMedium,
+        TextSize = 9.6, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 16
+    })
+
+    local dmConvoScroll = mk("ScrollingFrame", UI.dmInboxView, {
+        Size = UDim2.new(1, 0, 1, -34), Position = UDim2.fromOffset(0, 34),
+        BackgroundTransparency = 1, ScrollBarThickness = 2, ScrollBarImageColor3 = Colors.Purple,
+        AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 15
+    })
+    mk("UIListLayout", dmConvoScroll, { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+
+    local dmNewPickerModal = mk("Frame", UI.mainFrame, {
+        Size = UDim2.fromOffset(280, 246), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.52),
+        BackgroundColor3 = rgb(11, 15, 24), BackgroundTransparency = 0.04, Visible = false, ZIndex = 95,
+        Corner = UDim.new(0, 15), Stroke = { Color = Colors.Primary, Thickness = 1.3, Transparency = 0.2 }
+    })
+    local dnpScale = mk("UIScale", dmNewPickerModal, { Scale = 0 })
+    mk("TextLabel", dmNewPickerModal, {
+        Size = UDim2.new(1, -38, 0, 26), Position = UDim2.fromOffset(12, 5), BackgroundTransparency = 1,
+        Text = "💬 " .. sc("START NEW PRIVATE CHAT"), TextColor3 = Colors.Primary,
+        Font = Enum.Font.GothamBlack, TextSize = 9.8, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 96
+    })
+    local dnpClose = mk("TextButton", dmNewPickerModal, {
+        Size = UDim2.fromOffset(22, 22), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -7, 0, 6),
+        BackgroundColor3 = Colors.Background, Text = "X", TextColor3 = Colors.Danger,
+        Font = Enum.Font.GothamBlack, TextSize = 9, ZIndex = 96, Corner = UDim.new(1, 0)
+    })
+    dnpClose.MouseButton1Click:Connect(function()
+        Svc.Tween:Create(dnpScale, TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Scale = 0 }):Play()
+        task.delay(0.16, function() dmNewPickerModal.Visible = false end)
+    end)
+
+    local dnpUserBox = mk("TextBox", dmNewPickerModal, {
+        Size = UDim2.new(0.66, -4, 0, 28), Position = UDim2.fromOffset(12, 34), BackgroundColor3 = rgb(17, 23, 36),
+        Text = "", PlaceholderText = sc("Offline/Online username..."), PlaceholderColor3 = Colors.SubText,
+        TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBold, TextSize = 9.5, ClearTextOnFocus = false, ZIndex = 96,
+        Corner = UDim.new(0, 8), Stroke = { Color = Colors.PrimaryDark, Thickness = 1 }
+    })
+    local dnpStartBtn = mk("TextButton", dmNewPickerModal, {
+        Size = UDim2.new(0.34, -12, 0, 28), Position = UDim2.new(0.66, 0, 0, 34), BackgroundColor3 = Colors.Primary,
+        Text = sc("OPEN"), TextColor3 = rgb(10, 13, 20), Font = Enum.Font.GothamBlack, TextSize = 9.4,
+        AutoButtonColor = false, ZIndex = 96, Corner = UDim.new(0, 8)
+    })
+    applySpringHover(dnpStartBtn)
+
+    local dnpScroll = mk("ScrollingFrame", dmNewPickerModal, {
+        Size = UDim2.new(1, -24, 1, -74), Position = UDim2.fromOffset(12, 68), BackgroundTransparency = 1,
+        ScrollBarThickness = 2, ScrollBarImageColor3 = Colors.Primary, AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 96
+    })
+    mk("UIListLayout", dnpScroll, { Padding = UDim.new(0, 5) })
+
+    local openDmConversationRoom
+
+    local function ensureConversationRecord(username, dispName)
+        local low = tostring(username or ""):lower()
+        if low == "" or low == myLow or low == "system" then return nil end
+        local realUser = S.knownUsers[low] or username
+        local realDisp = dispName or S.knownDispNames[low] or realUser
+        if not S.dmConversations[low] then
+            S.dmConversations[low] = {
+                user = realUser,
+                disp = realDisp,
+                unread = 0,
+                lastTime = os.time(),
+                lastTimeStr = os.date("%H:%M"),
+                lastMsg = "",
+                messages = {}
+            }
+        else
+            S.dmConversations[low].user = realUser
+            if dispName and dispName ~= "" then S.dmConversations[low].disp = dispName end
+        end
+        return S.dmConversations[low]
+    end
+
+    local function updateDmInputLockState()
+        if S.chatMode == "dm" and S.activeDmChatUser then
+            local pLow = S.activeDmChatUser:lower()
+            if S.blockedDmUsers[pLow] then
+                UI.chatInput.Text = ""
+                UI.chatInput.TextEditable = false
+                UI.chatInput.PlaceholderText = "🚫 " .. sc("YOU BLOCKED THIS USER (TAP UNBLOCK)")
+                UI.chatInput.PlaceholderColor3 = Colors.Danger
+                return
+            elseif S.blockedByUsers[pLow] then
+                UI.chatInput.Text = ""
+                UI.chatInput.TextEditable = false
+                UI.chatInput.PlaceholderText = "🚫 " .. sc("YOU ARE BLOCKED BY THIS USER")
+                UI.chatInput.PlaceholderColor3 = Colors.Danger
+                return
+            end
+        end
+        if S.updateMuteLockUI then S.updateMuteLockUI() end
+    end
+
+    local function refreshDmHeaderControls()
+        if S.chatMode ~= "dm" then
+            UI.dmHeaderBar.Visible = false
+            return
+        end
+        UI.dmHeaderBar.Visible = true
+        if S.activeDmChatUser then
+            local pLow = S.activeDmChatUser:lower()
+            local conv = ensureConversationRecord(S.activeDmChatUser)
+            local disp = (conv and conv.disp) or S.knownDispNames[pLow] or S.activeDmChatUser
+            local isOnline = (findPlayerCI(S.activeDmChatUser) ~= nil) or (S.activeUsersTable[pLow] ~= nil)
+            local isBlocked = (S.blockedDmUsers[pLow] == true)
+            local isBlockedBy = (S.blockedByUsers[pLow] == true)
+
+            dmInboxTitle.Visible = false
+            dmNewChatBtn.Visible = false
+            dmBackBtn.Visible = true
+            dmHeaderProfileBtn.Visible = true
+            dmBlockToggleBtn.Visible = true
+
+            dmHdrName.Text = disp .. " (@" .. (conv and conv.user or S.activeDmChatUser) .. ")"
+            if isBlocked then
+                dmHdrStatus.Text = "🚫 " .. sc("BLOCKED BY YOU")
+                dmHdrStatus.TextColor3 = Colors.Danger
+                dmHdrDot.BackgroundColor3 = Colors.Danger
+            elseif isBlockedBy then
+                dmHdrStatus.Text = "🚫 " .. sc("BLOCKED YOU")
+                dmHdrStatus.TextColor3 = Colors.Danger
+                dmHdrDot.BackgroundColor3 = Colors.Danger
+            elseif isOnline then
+                dmHdrStatus.Text = "● " .. sc("ONLINE • ENCRYPTED DM")
+                dmHdrStatus.TextColor3 = Colors.OnlineGreen
+                dmHdrDot.BackgroundColor3 = Colors.OnlineGreen
+            else
+                dmHdrStatus.Text = "○ " .. sc("OFFLINE • DELIVERS ON LOGIN")
+                dmHdrStatus.TextColor3 = Colors.SubText
+                dmHdrDot.BackgroundColor3 = Colors.SubText
+            end
+
+            if isBlocked then
+                dmBlockToggleBtn.Text = "✓ " .. sc("UNBLOCK")
+                dmBlockToggleBtn.BackgroundColor3 = rgb(16, 42, 28)
+                dmBlockToggleBtn.TextColor3 = Colors.OnlineGreen
+                dmBlockToggleBtn:FindFirstChildOfClass("UIStroke").Color = Colors.OnlineGreen
+            else
+                dmBlockToggleBtn.Text = "🚫 " .. sc("BLOCK")
+                dmBlockToggleBtn.BackgroundColor3 = rgb(42, 16, 26)
+                dmBlockToggleBtn.TextColor3 = Colors.Danger
+                dmBlockToggleBtn:FindFirstChildOfClass("UIStroke").Color = Colors.Danger
+            end
+
+            local prof = S.userProfiles[pLow]
+            if prof and prof.customAv and prof.customAv ~= "" then
+                applyCustomMediaToImage(prof.customAv, dmHdrAv)
+            else
+                local uid = S.userIdCache[pLow]
+                if uid then
+                    dmHdrAv.Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=60&h=60", uid)
+                end
+            end
+        else
+            dmBackBtn.Visible = false
+            dmHeaderProfileBtn.Visible = false
+            dmBlockToggleBtn.Visible = false
+            dmInboxTitle.Visible = true
+            dmNewChatBtn.Visible = true
+        end
+        updateDmInputLockState()
+    end
+
+    local function renderDmInboxList()
+        for _, ch in ipairs(dmConvoScroll:GetChildren()) do
+            if ch:IsA("GuiObject") and ch.Name ~= "UIListLayout" then ch:Destroy() end
+        end
+
+        local list = {}
+        local q = (S.dmSearchQuery or ""):lower():gsub("^@", "")
+        for pLow, conv in pairs(S.dmConversations) do
+            local match = (q == "") or pLow:find(q, 1, true) or tostring(conv.disp or ""):lower():find(q, 1, true)
+            if match then
+                table.insert(list, { low = pLow, data = conv })
+            end
+        end
+
+        table.sort(list, function(a, b)
+            return (tonumber(a.data.lastTime) or 0) > (tonumber(b.data.lastTime) or 0)
+        end)
+
+        if #list == 0 then
+            local emptyCard = mk("Frame", dmConvoScroll, {
+                Size = UDim2.new(1, 0, 0, 120), BackgroundColor3 = rgb(14, 19, 30), BackgroundTransparency = 0.25,
+                ZIndex = 16, Corner = UDim.new(0, 12), Stroke = { Color = Colors.SurfaceHover, Thickness = 1 }
+            })
+            mk("TextLabel", emptyCard, {
+                Size = UDim2.new(1, -24, 0, 24), Position = UDim2.fromOffset(12, 24), BackgroundTransparency = 1,
+                Text = "💬 " .. sc("NO CONVERSATIONS YET"), TextColor3 = Colors.Primary,
+                Font = Enum.Font.GothamBlack, TextSize = 11.5, ZIndex = 17
+            })
+            mk("TextLabel", emptyCard, {
+                Size = UDim2.new(1, -24, 0, 44), Position = UDim2.fromOffset(12, 50), BackgroundTransparency = 1,
+                Text = sc("Tap '+ NEW DM' above or open any player's profile to start a WhatsApp-style private chat (works even when offline!)."),
+                TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 9.4, TextWrapped = true, ZIndex = 17
+            })
+            return
+        end
+
+        for idx, item in ipairs(list) do
+            local pLow = item.low
+            local conv = item.data
+            local isBlocked = (S.blockedDmUsers[pLow] == true)
+            local isOnline = (findPlayerCI(conv.user) ~= nil) or (S.activeUsersTable[pLow] ~= nil)
+            local unread = isBlocked and 0 or (tonumber(conv.unread) or 0)
+
+            local row = mk("TextButton", dmConvoScroll, {
+                Size = UDim2.new(1, -2, 0, 54), BackgroundColor3 = unread > 0 and rgb(20, 26, 44) or rgb(14, 19, 30),
+                BackgroundTransparency = 0.14, Text = "", AutoButtonColor = false, LayoutOrder = idx, ZIndex = 16,
+                Corner = UDim.new(0, 12), Stroke = { Color = unread > 0 and Colors.Purple or (isBlocked and Colors.Danger or Colors.SurfaceHover), Thickness = unread > 0 and 1.2 or 0.9, Transparency = 0.35 }
+            })
+            applySpringHover(row)
+
+            local avWrap = mk("Frame", row, {
+                Size = UDim2.fromOffset(38, 38), AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 8, 0.5, 0),
+                BackgroundTransparency = 1, ZIndex = 17
+            })
+            local avImg = mk("ImageLabel", avWrap, {
+                Size = UDim2.fromOffset(36, 36), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+                BackgroundColor3 = rgb(10, 13, 20), ScaleType = Enum.ScaleType.Crop, ZIndex = 18, Corner = UDim.new(1, 0)
+            })
+            if S.attachAvatarFrame then
+                S.attachAvatarFrame(avImg, pLow, 36, 17)
+            end
+            mk("Frame", avWrap, {
+                Size = UDim2.fromOffset(9, 9), AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, 0, 1, 0),
+                BackgroundColor3 = isBlocked and Colors.Danger or (isOnline and Colors.OnlineGreen or rgb(110, 122, 145)),
+                ZIndex = 25, Corner = UDim.new(1, 0), Stroke = { Color = rgb(14, 19, 30), Thickness = 1.8 }
+            })
+
+            local prof = S.userProfiles[pLow]
+            if prof and prof.customAv and prof.customAv ~= "" then
+                applyCustomMediaToImage(prof.customAv, avImg)
+            else
+                local uid = S.userIdCache[pLow]
+                if uid then
+                    avImg.Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=60&h=60", uid)
+                else
+                    task.spawn(function()
+                        local ok, fetched = pcall(function() return Svc.Players:GetUserIdFromNameAsync(conv.user) end)
+                        if ok and fetched then
+                            S.userIdCache[pLow] = fetched
+                            if avImg and avImg.Parent then
+                                avImg.Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=60&h=60", fetched)
+                            end
+                        end
+                    end)
+                end
+            end
+
+            mk("TextLabel", row, {
+                Size = UDim2.new(1, -118, 0, 18), Position = UDim2.fromOffset(54, 7), BackgroundTransparency = 1,
+                Text = tostring(conv.disp or conv.user) .. (isBlocked and ("  [" .. sc("BLOCKED") .. "]") or ""),
+                TextColor3 = isBlocked and Colors.Danger or Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack,
+                TextSize = 11.2, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 18
+            })
+
+            local previewTxt = tostring(conv.lastMsg or "")
+            if previewTxt:find("%[MEME:") or previewTxt:find("%[WEBMEME:") then previewTxt = "🖼️ [Sent a GIF / Meme]" end
+            previewTxt = previewTxt:gsub("^%[REP:[^%]]+%]%s*", "")
+            if previewTxt == "" then previewTxt = sc("Tap to start chatting...") end
+
+            mk("TextLabel", row, {
+                Size = UDim2.new(1, -118, 0, 16), Position = UDim2.fromOffset(54, 27), BackgroundTransparency = 1,
+                Text = previewTxt, TextColor3 = unread > 0 and Colors.Text or Colors.SubText,
+                Font = unread > 0 and Enum.Font.GothamBold or Enum.Font.GothamMedium, TextSize = 9.5,
+                TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 18
+            })
+
+            mk("TextLabel", row, {
+                Size = UDim2.fromOffset(48, 14), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 8),
+                BackgroundTransparency = 1, Text = tostring(conv.lastTimeStr or ""),
+                TextColor3 = unread > 0 and Colors.Primary or Colors.SubText, Font = Enum.Font.GothamBold,
+                TextSize = 8.4, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 18
+            })
+
+            if unread > 0 then
+                local badge = mk("Frame", row, {
+                    Size = UDim2.fromOffset(20, 20), AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -10, 1, -7),
+                    BackgroundColor3 = Colors.Purple, ZIndex = 19, Corner = UDim.new(1, 0)
+                })
+                mk("TextLabel", badge, {
+                    Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = tostring(unread),
+                    TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 9.0, ZIndex = 20
+                })
+            end
+
+            row.MouseButton1Click:Connect(function()
+                openDmConversationRoom(conv.user, conv.disp)
+            end)
+        end
+    end
+
+    openDmConversationRoom = function(targetUser, targetDisp)
+        if not targetUser or targetUser == "" then return end
+        local conv = ensureConversationRecord(targetUser, targetDisp)
+        if not conv then return end
+
+        S.activeDmChatUser = conv.user
+        S.privateTarget = conv.user
+        conv.unread = 0
+        saveDmDatabase()
+        getTotalUnreadDms()
+
+        for _, child in ipairs(UI.messageFeed:GetChildren()) do
+            if child:IsA("GuiObject") and child:GetAttribute("ChatScope") == "dm" then
+                child:Destroy()
+            end
+        end
+
+        for _, mRec in ipairs(conv.messages) do
+            local isMeSender = (tostring(mRec.sender):lower() == myLow)
+            local senderTag = isMeSender and (lp.Name .. "::" .. lp.DisplayName) or (conv.user .. "::" .. conv.disp)
+            addMessageToFeed(senderTag, mRec.msg, conv.user, isMeSender, game.JobId, "dm", mRec.timeStr, mRec.id)
+        end
+
+        if S.chatMode ~= "dm" then
+            S.switchChatTab("dm")
+        else
+            UI.dmInboxView.Visible = false
+            UI.messageFeed.Visible = true
+            UI.inputContainer.Visible = true
+            UI.messageFeed.Position = UDim2.new(0, 12, 0, 126)
+            UI.messageFeed.Size = UDim2.new(1, -24, 1, S.activeReplyData and -220 or -188)
+            refreshDmHeaderControls()
+            scrollToFeedBottom()
+        end
+        playSFX("dm")
+    end
+    S.openDmConversationRoom = openDmConversationRoom
+
+    local function switchToDmInbox()
+        S.activeDmChatUser = nil
+        S.privateTarget = nil
+        if S.updateInputBar then S.updateInputBar() end
+        UI.messageFeed.Visible = false
+        UI.jumpBottomBtn.Visible = false
+        UI.inputContainer.Visible = false
+        UI.replyBanner.Visible = false
+        UI.dmInboxView.Visible = true
+        refreshDmHeaderControls()
+        renderDmInboxList()
+        getTotalUnreadDms()
+    end
+
+    dmBackBtn.MouseButton1Click:Connect(function()
+        switchToDmInbox()
+        playSFX("default")
+    end)
+
+    dmHeaderProfileBtn.MouseButton1Click:Connect(function()
+        if S.activeDmChatUser and S.openProfile then
+            local pLow = S.activeDmChatUser:lower()
+            S.openProfile(S.activeDmChatUser, S.knownDispNames[pLow] or S.activeDmChatUser, S.userIdCache[pLow], isVerifiedOwner(pLow), false)
+        end
+    end)
+
+    dmBlockToggleBtn.MouseButton1Click:Connect(function()
+        if not S.activeDmChatUser then return end
+        local pLow = S.activeDmChatUser:lower()
+        local nextBlock = not (S.blockedDmUsers[pLow] == true)
+        if nextBlock then
+            S.blockedDmUsers[pLow] = true
+        else
+            S.blockedDmUsers[pLow] = nil
+        end
+        saveDmDatabase()
+        broadcastDmBlockPacket(S.activeDmChatUser, nextBlock)
+        refreshDmHeaderControls()
+        getTotalUnreadDms()
+        playSFX(nextBlock and "default" or "reaction")
+    end)
+
+    dmSearchInput:GetPropertyChangedSignal("Text"):Connect(function()
+        S.dmSearchQuery = dmSearchInput.Text
+        renderDmInboxList()
+    end)
+
+    dmNewChatBtn.MouseButton1Click:Connect(function()
+        for _, c in ipairs(dnpScroll:GetChildren()) do
+            if c:IsA("TextButton") then c:Destroy() end
+        end
+        local seen, playersList = {}, {}
+        local function addCandidate(uName, dName)
+            if not uName or uName == "" then return end
+            local low = uName:lower()
+            if low == myLow or low == "system" or seen[low] then return end
+            seen[low] = true
+            table.insert(playersList, { user = uName, disp = dName or uName })
+        end
+
+        for _, plr in ipairs(Svc.Players:GetPlayers()) do
+            addCandidate(plr.Name, plr.DisplayName)
+        end
+        for uLow, info in pairs(S.activeUsersTable) do
+            local rU = (type(info) == "table" and info.user) or S.knownUsers[uLow] or uLow
+            local rD = (type(info) == "table" and info.disp) or S.knownDispNames[uLow] or rU
+            addCandidate(rU, rD)
+        end
+        for uLow, rU in pairs(S.knownUsers) do
+            addCandidate(rU, S.knownDispNames[uLow] or rU)
+        end
+
+        for _, item in ipairs(playersList) do
+            local isOnline = (findPlayerCI(item.user) ~= nil)
+            local btn = mk("TextButton", dnpScroll, {
+                Size = UDim2.new(1, -4, 0, 32), BackgroundColor3 = rgb(16, 22, 34),
+                Text = string.format("  %s  %s (@%s)", isOnline and "🟢" or "⚪", item.disp, item.user),
+                TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBold, TextSize = 9.4,
+                TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
+                AutoButtonColor = false, ZIndex = 97, Corner = UDim.new(0, 8), Stroke = { Color = Colors.SurfaceHover, Thickness = 0.9 }
+            })
+            applySpringHover(btn)
+            btn.MouseButton1Click:Connect(function()
+                dmNewPickerModal.Visible = false
+                openDmConversationRoom(item.user, item.disp)
+            end)
+        end
+
+        dmNewPickerModal.Visible = true
+        dnpScale.Scale = 0.85
+        Svc.Tween:Create(dnpScale, TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+        playSFX("default")
+    end)
+
+    dnpStartBtn.MouseButton1Click:Connect(function()
+        local raw = dnpUserBox.Text:gsub("^@", ""):gsub("%s+", "")
+        if raw ~= "" and raw:lower() ~= myLow then
+            dnpUserBox.Text = ""
+            dmNewPickerModal.Visible = false
+            openDmConversationRoom(raw, S.knownDispNames[raw:lower()] or raw)
+        end
+    end)
+
+    local origSwitchChatTab = S.switchChatTab
+    S.switchChatTab = function(modeStr)
+        origSwitchChatTab(modeStr)
+        if modeStr == "dm" then
+            UI.dmHeaderBar.Visible = true
+            if S.activeDmChatUser then
+                UI.dmInboxView.Visible = false
+                UI.messageFeed.Visible = true
+                UI.inputContainer.Visible = true
+                UI.messageFeed.Position = UDim2.new(0, 12, 0, 126)
+                UI.messageFeed.Size = UDim2.new(1, -24, 1, S.activeReplyData and -220 or -188)
+                refreshDmHeaderControls()
+                scrollToFeedBottom()
+            else
+                switchToDmInbox()
+            end
+        else
+            UI.dmInboxView.Visible = false
+            UI.dmHeaderBar.Visible = false
+            if S.updateMuteLockUI then S.updateMuteLockUI() end
+        end
+    end
+
+    local profBlockBtn = mk("TextButton", UI.profileModal, {
+        Size = UDim2.fromOffset(72, 20), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 101),
+        BackgroundColor3 = rgb(42, 16, 26), Text = "🚫 " .. sc("BLOCK"), TextColor3 = Colors.Danger,
+        Font = Enum.Font.GothamBlack, TextSize = 8.2, AutoButtonColor = false, Visible = false, ZIndex = 365,
+        Corner = UDim.new(1, 0), Stroke = { Color = Colors.Danger, Thickness = 0.95, Transparency = 0.25 }
+    })
+    applySpringHover(profBlockBtn)
+
+    local function syncProfileBlockBtn()
+        if not S.activeProfileUser then profBlockBtn.Visible = false return end
+        local pLow = S.activeProfileUser:lower()
+        if pLow == myLow or pLow == "system" then
+            profBlockBtn.Visible = false
+            return
+        end
+        profBlockBtn.Visible = true
+        local isBlk = (S.blockedDmUsers[pLow] == true)
+        profBlockBtn.Text = isBlk and ("✓ " .. sc("UNBLOCK")) or ("🚫 " .. sc("BLOCK"))
+        profBlockBtn.BackgroundColor3 = isBlk and rgb(16, 42, 28) or rgb(42, 16, 26)
+        profBlockBtn.TextColor3 = isBlk and Colors.OnlineGreen or Colors.Danger
+        profBlockBtn:FindFirstChildOfClass("UIStroke").Color = isBlk and Colors.OnlineGreen or Colors.Danger
+    end
+
+    profBlockBtn.MouseButton1Click:Connect(function()
+        if not S.activeProfileUser then return end
+        local pLow = S.activeProfileUser:lower()
+        local nextBlk = not (S.blockedDmUsers[pLow] == true)
+        if nextBlk then S.blockedDmUsers[pLow] = true else S.blockedDmUsers[pLow] = nil end
+        saveDmDatabase()
+        broadcastDmBlockPacket(S.activeProfileUser, nextBlk)
+        syncProfileBlockBtn()
+        refreshDmHeaderControls()
+        getTotalUnreadDms()
+        playSFX(nextBlk and "default" or "reaction")
+    end)
+
+    local prevOpenProfile = S.openProfile
+    S.openProfile = function(username, dispName, uId, isAdmin, isAI)
+        prevOpenProfile(username, dispName, uId, isAdmin, isAI)
+        syncProfileBlockBtn()
+        for _, ch in ipairs(UI.profileModal:GetDescendants()) do
+            if ch:IsA("TextButton") and ch.Position == UDim2.new(1, -14, 0, 99) then
+                ch.Position = (username:lower() ~= myLow and not isAI) and UDim2.new(1, -92, 0, 99) or UDim2.new(1, -14, 0, 99)
+            end
+        end
+    end
+
+    local function recordMessageInConversation(partnerUser, partnerDisp, senderUser, bodyText, msgId, timeStr, isIncomingUnread)
+        local conv = ensureConversationRecord(partnerUser, partnerDisp)
+        if not conv then return end
+
+        for _, existing in ipairs(conv.messages) do
+            if existing.id == msgId then return end
+        end
+
+        table.insert(conv.messages, {
+            id = msgId,
+            sender = senderUser,
+            msg = bodyText,
+            timeStr = timeStr or os.date("%H:%M")
+        })
+        conv.lastTime = os.time()
+        conv.lastTimeStr = timeStr or os.date("%H:%M")
+        conv.lastMsg = (tostring(senderUser):lower() == myLow and "You: " or "") .. bodyText
+
+        if isIncomingUnread then
+            local viewingThisRoom = (S.chatMode == "dm" and S.activeDmChatUser and S.activeDmChatUser:lower() == partnerUser:lower() and UI.mainFrame.Visible)
+            if not viewingThisRoom then
+                conv.unread = (tonumber(conv.unread) or 0) + 1
+            end
+        end
+
+        saveDmDatabase()
+        getTotalUnreadDms()
+        if S.chatMode == "dm" and not S.activeDmChatUser then
+            renderDmInboxList()
+        end
+    end
+
+    local origSendMessageFunc = S.sendMessageFunc
+    S.sendMessageFunc = function(overrideText)
+        local rawTxt = overrideText or UI.chatInput.Text or ""
+        local pMatch = rawTxt:match("^!p%s+([%w_]+)")
+        if pMatch then
+            UI.chatInput.Text = ""
+            openDmConversationRoom(pMatch, S.knownDispNames[pMatch:lower()] or pMatch)
+            return
+        end
+
+        if S.chatMode == "dm" and S.activeDmChatUser then
+            S.privateTarget = S.activeDmChatUser
+        end
+
+        if S.privateTarget then
+            local tLow = S.privateTarget:lower()
+            if S.blockedDmUsers[tLow] then
+                UI.chatInput.Text = ""
+                addMessageToFeed("System::" .. BRAND_TITLE, "🚫 You blocked @" .. S.privateTarget .. ". Tap UNBLOCK in the top bar to send messages.", S.privateTarget, false, game.JobId, "dm")
+                return
+            end
+            if S.blockedByUsers[tLow] then
+                UI.chatInput.Text = ""
+                addMessageToFeed("System::" .. BRAND_TITLE, "🚫 Message not delivered — @" .. S.privateTarget .. " has blocked you from sending DMs.", S.privateTarget, false, game.JobId, "dm")
+                return
+            end
+
+            local cleanBody = rawTxt:gsub("^%s+", ""):gsub("%s+$", "")
+            if cleanBody ~= "" and not cleanBody:match("^[!/]") then
+                local msgId = lp.Name .. "_DM_" .. tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
+                recordMessageInConversation(S.privateTarget, S.knownDispNames[tLow] or S.privateTarget, lp.Name, cleanBody, msgId, os.date("%H:%M"), false)
+                if not S.activeDmChatUser or S.activeDmChatUser:lower() ~= tLow then
+                    openDmConversationRoom(S.privateTarget, S.knownDispNames[tLow] or S.privateTarget)
+                end
+            end
+        end
+
+        origSendMessageFunc(overrideText)
+    end
+
+    local seenDmNetIds = {}
+    local hookOrigReq = S.req
+    if hookOrigReq then
+        S.req = function(opts, ...)
+            local res = hookOrigReq(opts, ...)
+            pcall(function()
+                if type(opts) == "table" and type(opts.Url) == "string" and opts.Method == "GET"
+                    and opts.Url:find("/messages?since=", 1, true)
+                    and res and (res.StatusCode == 200 or res.Status == 200) and res.Body then
+                    local ok, data = pcall(function() return Svc.Http:JSONDecode(res.Body) end)
+                    if ok and type(data) == "table" then
+                        for _, m in ipairs(data) do
+                            if type(m) == "table" and type(m.msg) == "string" and type(m.user) == "string" then
+                                local uidKey = tostring(m.id or (tostring(m.time) .. "_" .. m.user .. "_" .. m.msg))
+                                if not seenDmNetIds[uidKey] then
+                                    seenDmNetIds[uidKey] = true
+                                    local rawU, rawD = m.user:match("^(.-)::(.*)$")
+                                    local senderU = rawU or m.user
+                                    local senderD = rawD or senderU
+                                    local senderLow = senderU:lower()
+
+                                    local blkTgt, blkState = m.msg:match("^__DM_BLOCK__:([^|]+)|([01])$")
+                                    if blkTgt and blkTgt:lower() == myLow then
+                                        if blkState == "1" then
+                                            S.blockedByUsers[senderLow] = true
+                                        else
+                                            S.blockedByUsers[senderLow] = nil
+                                        end
+                                        saveDmDatabase()
+                                        refreshDmHeaderControls()
+                                    end
+
+                                    local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
+                                    if pSender and pTarget then
+                                        if pTarget:lower() == myLow then
+                                            if S.blockedDmUsers[pSender:lower()] then
+                                                m.hidden = true
+                                            else
+                                                recordMessageInConversation(pSender, senderD, pSender, pMsg, uidKey, os.date("%H:%M"), true)
+                                                if not (S.chatMode == "dm" and S.activeDmChatUser and S.activeDmChatUser:lower() == pSender:lower()) then
+                                                    m.hidden = true
+                                                    playSFX("dm")
+                                                    if not UI.mainFrame.Visible then
+                                                        S.unreadCount = S.unreadCount + 1
+                                                        UI.unreadTxt.Text = tostring(S.unreadCount)
+                                                        UI.unreadBadge.Visible = true
+                                                        triggerOrbToast(sc("DM") .. " • " .. senderD, pMsg)
+                                                    end
+                                                end
+                                            end
+                                        elseif pSender:lower() == myLow then
+                                            recordMessageInConversation(pTarget, S.knownDispNames[pTarget:lower()] or pTarget, lp.Name, pMsg, uidKey, os.date("%H:%M"), false)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+            return res
+        end
+    end
+
+    getTotalUnreadDms()
+end
