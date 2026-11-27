@@ -7345,6 +7345,7 @@ pcall(function()
 
         local lastT = EG.recent[key]
         if lastT and (now - lastT) < 25 then
+            warn("[TXR EchoGuard] duplicate copy of my own message blocked (re-delivery)")
             return true
         end
 
@@ -7354,8 +7355,26 @@ pcall(function()
                 if msgN:find(p.msg, 1, true) or p.msg:find(msgN, 1, true) then
                     table.remove(EG.pending, i)
                     EG.recent[key] = now
+                    warn("[TXR EchoGuard] edited echo of my own message matched")
                     return true
                 end
+            end
+        end
+        return false
+    end
+
+    -- On a fresh load the saved local history (disk cache) and the server history both
+    -- contain my old messages under different keys -> the same message used to render twice.
+    function EG.matchCache(m)
+        if type(m) ~= "table" or tostring(m.msg or ""):sub(1, 5) ~= "[GLB]" then return false end
+        local cache = _G.TXR_GlobalHistoryCache
+        if type(cache) ~= "table" then return false end
+        local uName = nameOf(m.user)
+        local bodyN = norm((tostring(m.msg):gsub("^%[GLB%]%s*", "")))
+        for _, item in ipairs(cache) do
+            if type(item) == "table" and not item.__txMatched and nameOf(item.user) == uName and norm(item.msg) == bodyN then
+                item.__txMatched = true
+                return true
             end
         end
         return false
@@ -10709,8 +10728,10 @@ task.spawn(function()
 
                             S.remoteTypers[rawDispOnly] = nil
 
-                            if actorLow == lp.Name:lower() and S.EchoGuard and S.EchoGuard.shouldDrop(m) then
-                                continue
+                            if actorLow == lp.Name:lower() and S.EchoGuard then
+                                if S.EchoGuard.shouldDrop(m) or (wasInitial and S.EchoGuard.matchCache(m)) then
+                                    continue
+                                end
                             end
 
                             if actorLow == lp.Name:lower() then
@@ -11701,5 +11722,221 @@ do
         end)
     end)
 
+    -- =====================================================
+    -- 📥 TXR DM HISTORY REPLAY ENGINE
+    -- The very first /messages?since=0 poll is fired BEFORE the DM hook exists, so every
+    -- DM stored on the server (sent while I was offline / before I loaded the script) was
+    -- never recorded -> empty inbox. This engine re-reads the history once through the
+    -- DM recorder (silent: no sfx / toast spam) and retries if the server is cold-starting.
+    -- =====================================================
+    pcall(function()
+        local function validEpoch(v)
+            v = tonumber(v)
+            if v and v > 1e9 and v < 4e9 then return v end
+            return nil
+        end
+
+        local function replayOnce()
+            if not hookOrigReq then return true end
+            local res = hookOrigReq({
+                Url = S.SERVER_URL .. "/messages?since=0", Method = "GET",
+                Headers = { ["User-Agent"] = "Roblox/WinInet" }
+            })
+            if not (res and (res.StatusCode == 200 or res.Status == 200) and res.Body) then return false end
+            local okDec, data = pcall(function() return Svc.Http:JSONDecode(res.Body) end)
+            if not okDec or type(data) ~= "table" then return false end
+
+            for _, m in ipairs(data) do
+                if type(m) == "table" and type(m.msg) == "string" and type(m.user) == "string" then
+                    local uidKey = tostring(m.id or (tostring(m.time) .. "_" .. m.user .. "_" .. m.msg))
+                    if not seenDmNetIds[uidKey] then
+                        seenDmNetIds[uidKey] = true
+                        local rawU, rawD = m.user:match("^(.-)::(.*)$")
+                        local senderU = rawU or m.user
+                        local senderD = rawD or senderU
+                        local senderLow = senderU:lower()
+
+                        local blkTgt, blkState = m.msg:match("^__DM_BLOCK__:([^|]+)|([01])$")
+                        if blkTgt and blkTgt:lower() == myLow then
+                            if blkState == "1" then S.blockedByUsers[senderLow] = true else S.blockedByUsers[senderLow] = nil end
+                        end
+
+                        local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
+                        if pSender and pTarget then
+                            local mt = validEpoch(m.time)
+                            local tStr = mt and os.date("%H:%M", mt) or os.date("%H:%M")
+                            local partnerLow
+                            if pTarget:lower() == myLow and not S.blockedDmUsers[pSender:lower()] then
+                                partnerLow = pSender:lower()
+                                local cv = S.dmConversations[partnerLow]
+                                local prevLast = cv and tonumber(cv.lastTime) or 0
+                                local before = cv and #cv.messages or 0
+                                recordMessageInConversation(pSender, senderD, pSender, pMsg, uidKey, tStr, true)
+                                cv = S.dmConversations[partnerLow]
+                                if cv and #cv.messages > before and mt then cv.lastTime = math.max(prevLast, mt) end
+                            elseif pSender:lower() == myLow then
+                                partnerLow = pTarget:lower()
+                                local cv = S.dmConversations[partnerLow]
+                                local prevLast = cv and tonumber(cv.lastTime) or 0
+                                local before = cv and #cv.messages or 0
+                                recordMessageInConversation(pTarget, S.knownDispNames[partnerLow] or pTarget, lp.Name, pMsg, uidKey, tStr, false)
+                                cv = S.dmConversations[partnerLow]
+                                if cv and #cv.messages > before and mt then cv.lastTime = math.max(prevLast, mt) end
+                            end
+                        end
+                    end
+                end
+            end
+            saveDmDatabase()
+            getTotalUnreadDms()
+            if S.chatMode == "dm" and not S.activeDmChatUser then renderDmInboxList() end
+            return true
+        end
+
+        task.spawn(function()
+            task.wait(2)
+            local attempts = 0
+            while attempts < 6 and _G.TXR_ChatInstanceID == currentExecutionID and UI.gui and UI.gui.Parent do
+                attempts = attempts + 1
+                local okRun, done = pcall(replayOnce)
+                if okRun and done then break end
+                task.wait(8)
+            end
+        end)
+    end)
+
+    -- =====================================================
+    -- 🪟 TXR PROFILE OVERLAY GUARD
+    -- TAG / GLOW / BLOCK sit above the profile at a very high ZIndex, so they were drawn on
+    -- top of the Followers / Following list and the media studio. They are now hidden while
+    -- any profile sub-panel is open and restored exactly as they were when it closes.
+    -- =====================================================
+    pcall(function()
+        local overlays, bound = {}, {}
+        local savedVis, hiddenNow = {}, false
+        local scans = 0
+
+        local function guardButtons()
+            return { UI.pmTagBtn, UI.pmGlowBtn, profBlockBtn }
+        end
+
+        local function findOverlays()
+            for _, d in ipairs(UI.profileModal:GetDescendants()) do
+                if d:IsA("Frame") and not bound[d] then
+                    local z, sy = d.ZIndex, d.Size.Y.Offset
+                    if (z == 330 and sy == 234) or (z == 345 and sy == 274) then
+                        bound[d] = true
+                        table.insert(overlays, d)
+                    end
+                end
+            end
+        end
+
+        local function anyOverlayOpen()
+            for _, ov in ipairs(overlays) do
+                if ov.Parent and ov.Visible then return true end
+            end
+            return false
+        end
+
+        local function syncGuard()
+            if #overlays < 2 and scans < 3 then
+                scans = scans + 1
+                findOverlays()
+            end
+            local want = anyOverlayOpen()
+            if want then
+                for _, b in ipairs(guardButtons()) do
+                    if b and b.Visible then
+                        if savedVis[b] == nil then savedVis[b] = true end
+                        b.Visible = false
+                    end
+                end
+                hiddenNow = true
+            elseif hiddenNow then
+                hiddenNow = false
+                for b, wasVis in pairs(savedVis) do
+                    if b and b.Parent and wasVis and UI.profileModal.Visible then b.Visible = true end
+                end
+                savedVis = {}
+                pcall(syncProfileBlockBtn)
+            end
+        end
+        S.syncProfileOverlayGuard = syncGuard
+
+        local prevOpenProfileForGuard = S.openProfile
+        S.openProfile = function(...)
+            prevOpenProfileForGuard(...)
+            pcall(syncGuard)
+        end
+
+        task.spawn(function()
+            while _G.TXR_IsPolling and (_G.TXR_ChatInstanceID == currentExecutionID) and UI.gui and UI.gui.Parent do
+                task.wait(0.25)
+                if UI.profileModal.Visible then pcall(syncGuard) end
+            end
+        end)
+    end)
+
     getTotalUnreadDms()
 end
+
+-- =========================================================
+-- 🧱 TXR LAST-LINE DUPLICATE GUARDS (card level + request level)
+-- Installed last so they wrap the final versions of addMessageToFeed / S.req.
+-- =========================================================
+pcall(function()
+    local G = { localN = {}, localT = {} , dropT = {} }
+    S.CardGuard = G
+    local origAddMessageToFeed = addMessageToFeed
+    local myLowName = lp.Name:lower()
+    local localPrefix = lp.Name .. "::" .. lp.DisplayName .. "_"
+
+    addMessageToFeed = function(rawUserName, msg, privateUserTarget, isPrivateSender, msgJobId, scopeType, customTimeStr, explicitMsgId)
+        if not privateUserTarget and type(rawUserName) == "string" and type(msg) == "string" then
+            local who = (rawUserName:match("^(.-)::") or rawUserName):lower()
+            local scopeKey = scopeType or "global"
+            if who == myLowName and (scopeKey == "global" or scopeKey == "server") then
+                local now = os.clock()
+                local sig = scopeKey .. "|" .. msg
+                local isLocalCard = type(explicitMsgId) == "string" and explicitMsgId:sub(1, #localPrefix) == localPrefix
+                if isLocalCard then
+                    G.localN[sig] = (G.localN[sig] or 0) + 1
+                    G.localT[sig] = now
+                else
+                    if (G.localN[sig] or 0) > 0 and (now - (G.localT[sig] or 0)) < 90 then
+                        G.localN[sig] = G.localN[sig] - 1
+                        G.dropT[sig] = now
+                        warn("[TXR CardGuard] blocked second copy of my message (server echo)")
+                        return
+                    elseif G.dropT[sig] and (now - G.dropT[sig]) < 25 then
+                        G.dropT[sig] = now
+                        warn("[TXR CardGuard] blocked extra copy of my message")
+                        return
+                    end
+                end
+            end
+        end
+        return origAddMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSender, msgJobId, scopeType, customTimeStr, explicitMsgId)
+    end
+
+    local prevReq = S.req
+    if prevReq then
+        local lastChatBody, lastChatT = nil, 0
+        S.req = function(opts, ...)
+            if type(opts) == "table" and opts.Method == "POST" and type(opts.Url) == "string"
+                and opts.Url:find("/send", 1, true) and type(opts.Body) == "string" then
+                local b = opts.Body
+                if b:find("[GLB] ", 1, true) or b:find("[SRV:", 1, true) or b:find("Private", 1, true) then
+                    local now = os.clock()
+                    if b == lastChatBody and (now - lastChatT) < 0.6 then
+                        warn("[TXR SendGuard] identical chat POST within 0.6s blocked")
+                        return { Success = true, StatusCode = 200, Status = 200, Body = "{}" }
+                    end
+                    lastChatBody, lastChatT = b, now
+                end
+            end
+            return prevReq(opts, ...)
+        end
+    end
+end)
