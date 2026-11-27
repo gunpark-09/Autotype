@@ -207,7 +207,7 @@ task.spawn(function()
         if re then
             local nameEv = re:WaitForChild("1RPNam1eTex1t", 10)
             local colorEv = re:FindFirstChild("1RPNam1eColo1r")
-            local targetRpName = "⌜ᴛ x ʀ 〆 ʀ ᴇ ᴄ ʜ ᴀ ᴛ⌟"
+            local targetRpName = "ᴛ x ʀ 〆 ʀ ᴇ ᴄ ʜ ᴀ ᴛ"
 
             if nameEv then
                 nameEv:FireServer("RolePlayName", targetRpName, rgb(255, 15, 35))
