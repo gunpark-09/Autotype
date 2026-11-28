@@ -9,7 +9,7 @@ local Svc = {
     CoreGui = game:GetService("CoreGui")
 }
 
-local MAIN_SCRIPT_URL = ""
+local MAIN_SCRIPT_URL = "https://raw.githubusercontent.com/gunpark-09/Autotype/refs/heads/main/Robilox"
 local compiledMainFn = nil
 local fetchFinished = false
 
