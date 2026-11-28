@@ -1,0 +1,844 @@
+-- =========================================================
+-- 🎬 STANDALONE DEMO: TXR // RECHAT INTRO (ULTRA SMOOTH MICRO-DETAIL EDITION)
+-- =========================================================
+local Svc = {
+    Players = game:GetService("Players"),
+    Run = game:GetService("RunService"),
+    Tween = game:GetService("TweenService"),
+    Sound = game:GetService("SoundService"),
+    CoreGui = game:GetService("CoreGui")
+}
+
+local MAIN_SCRIPT_URL = ""
+local compiledMainFn = nil
+local fetchFinished = false
+
+-- Background mein script pre-fetch aur compile karna taaki intro ke baad zero lag ho
+task.spawn(function()
+    local ok, rawCode = pcall(function()
+        return game:HttpGet(MAIN_SCRIPT_URL)
+    end)
+    if ok and type(rawCode) == "string" and #rawCode > 0 then
+        local fn = loadstring(rawCode)
+        if type(fn) == "function" then
+            compiledMainFn = fn
+        end
+    end
+    fetchFinished = true
+end)
+
+local lp = Svc.Players.LocalPlayer
+local rgb, csk = Color3.fromRGB, ColorSequenceKeypoint.new
+local tw = function(obj, time, style, dir, props)
+    local t = Svc.Tween:Create(obj, TweenInfo.new(time, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out), props)
+    t:Play()
+    return t
+end
+
+local SmallCapsMap = {
+    a = "ᴀ", b = "ʙ", c = "ᴄ", d = "ᴅ", e = "ᴇ", f = "ꜰ", g = "ɢ", h = "ʜ",
+    i = "ɪ", j = "ᴊ", k = "ᴋ", l = "ʟ", m = "ᴍ", n = "ɴ", o = "ᴏ", p = "ᴩ",
+    q = "ǫ", r = "ʀ", s = "ꜱ", t = "ᴛ", u = "ᴜ", v = "ᴠ", w = "ᴡ", x = "x",
+    y = "ʏ", z = "ᴢ"
+}
+local function sc(str)
+    if not str then return "" end
+    return (tostring(str):lower():gsub("%a", function(ch)
+        return SmallCapsMap[ch] or ch
+    end))
+end
+
+local function playUiTick(id, vol, pitch)
+    task.spawn(function()
+        pcall(function()
+            local s = Instance.new("Sound")
+            s.SoundId = id
+            s.Volume = vol or 0.45
+            s.PlaybackSpeed = pitch or 1
+            s.Parent = Svc.Sound
+            s:Play()
+            task.delay(1.8, function() pcall(function() s:Destroy() end) end)
+        end)
+    end)
+end
+
+local introParent
+pcall(function() introParent = Svc.CoreGui end)
+if gethui then pcall(function() introParent = gethui() end) end
+if not introParent then introParent = lp:WaitForChild("PlayerGui") end
+
+for _, old in ipairs(introParent:GetChildren()) do
+    if old.Name:find("Intro") or old.Name:find("TXR_Glassy") or old.Name:find("DynamicIsland") then
+        old:Destroy()
+    end
+end
+
+local introGui = Instance.new("ScreenGui")
+introGui.Name = "TXR_GlassyIntroScreen"
+introGui.IgnoreGuiInset = true
+introGui.DisplayOrder = 100000
+introGui.ResetOnSpawn = false
+introGui.Parent = introParent
+
+-- Soft Translucent Screen Dimmer
+local backdrop = Instance.new("Frame", introGui)
+backdrop.Size = UDim2.fromScale(1, 1)
+backdrop.BackgroundColor3 = rgb(4, 6, 11)
+backdrop.BackgroundTransparency = 1
+backdrop.BorderSizePixel = 0
+
+-- Ambient Radial Glow behind the island
+local ambientGlow = Instance.new("ImageLabel", backdrop)
+ambientGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+ambientGlow.Position = UDim2.new(0.5, 0, 0.34, 0)
+ambientGlow.Size = UDim2.fromOffset(620, 620)
+ambientGlow.BackgroundTransparency = 1
+ambientGlow.Image = "rbxassetid://5028857084"
+ambientGlow.ImageColor3 = rgb(80, 120, 255)
+ambientGlow.ImageTransparency = 1
+ambientGlow.ZIndex = 0
+
+-- Floating dust particles
+local particleHolder = Instance.new("Frame", backdrop)
+particleHolder.Size = UDim2.fromScale(1, 1)
+particleHolder.BackgroundTransparency = 1
+particleHolder.ZIndex = 1
+
+local particles = {}
+for i = 1, 14 do
+    local p = Instance.new("Frame", particleHolder)
+    local sz = math.random(2, 4)
+    p.Size = UDim2.fromOffset(sz, sz)
+    p.Position = UDim2.fromScale(math.random(30, 70) / 100, math.random(15, 55) / 100)
+    p.BackgroundColor3 = (i % 2 == 0) and rgb(0, 240, 205) or rgb(150, 95, 255)
+    p.BackgroundTransparency = 1
+    p.BorderSizePixel = 0
+    Instance.new("UICorner", p).CornerRadius = UDim.new(1, 0)
+    particles[i] = {
+        inst = p,
+        baseX = p.Position.X.Scale,
+        baseY = p.Position.Y.Scale,
+        speed = math.random(40, 90) / 100,
+        phase = math.random(0, 628) / 100,
+        amp = math.random(10, 22) / 1000
+    }
+end
+
+-- Main Dynamic Island -> Frosted Glass Chassis
+local island = Instance.new("Frame", backdrop)
+island.Size = UDim2.fromOffset(172, 34)
+island.AnchorPoint = Vector2.new(0.5, 0.5)
+island.Position = UDim2.new(0.5, 0, 0.34, 0)
+island.BackgroundColor3 = rgb(12, 17, 29)
+island.BackgroundTransparency = 1
+island.ClipsDescendants = true
+island.ZIndex = 4
+local islandCorner = Instance.new("UICorner", island)
+islandCorner.CornerRadius = UDim.new(0, 24)
+
+local islandScale = Instance.new("UIScale", island)
+islandScale.Scale = 0.82
+
+-- Soft drop shadow beneath the island
+local islandShadow = Instance.new("ImageLabel", backdrop)
+islandShadow.AnchorPoint = Vector2.new(0.5, 0.5)
+islandShadow.Image = "rbxassetid://5554236805"
+islandShadow.ImageColor3 = rgb(0, 0, 0)
+islandShadow.ImageTransparency = 1
+islandShadow.ScaleType = Enum.ScaleType.Slice
+islandShadow.SliceCenter = Rect.new(49, 49, 450, 450)
+islandShadow.BackgroundTransparency = 1
+islandShadow.ZIndex = 3
+
+local function syncShadow()
+    islandShadow.Position = island.Position + UDim2.fromOffset(0, 6)
+    islandShadow.Size = island.AbsoluteSize ~= Vector2.new(0, 0)
+        and UDim2.fromOffset(island.AbsoluteSize.X + 40, island.AbsoluteSize.Y + 40)
+        or UDim2.fromOffset(212, 74)
+end
+
+-- Translucent Acrylic Glass Multi-Tone Gradient
+local cGrad = Instance.new("UIGradient", island)
+cGrad.Rotation = 135
+cGrad.Color = ColorSequence.new({
+    csk(0.00, rgb(34, 48, 78)),
+    csk(0.50, rgb(14, 20, 34)),
+    csk(1.00, rgb(9, 13, 24))
+})
+cGrad.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0.00, 0.04),
+    NumberSequenceKeypoint.new(0.50, 0.16),
+    NumberSequenceKeypoint.new(1.00, 0.06)
+})
+
+-- Inner 1px Frosted Glass Bevel Rim
+local innerRim = Instance.new("Frame", island)
+innerRim.Size = UDim2.new(1, -2, 1, -2)
+innerRim.AnchorPoint = Vector2.new(0.5, 0.5)
+innerRim.Position = UDim2.fromScale(0.5, 0.5)
+innerRim.BackgroundTransparency = 1
+local rimCorner = Instance.new("UICorner", innerRim)
+rimCorner.CornerRadius = UDim.new(0, 23)
+local rimStroke = Instance.new("UIStroke", innerRim)
+rimStroke.Thickness = 1
+rimStroke.Color = Color3.new(1, 1, 1)
+rimStroke.Transparency = 1
+
+-- Top-to-Bottom Frosted Glass Reflection
+local glassSheen = Instance.new("Frame", island)
+glassSheen.Size = UDim2.fromScale(1, 1)
+glassSheen.BackgroundColor3 = Color3.new(1, 1, 1)
+glassSheen.BackgroundTransparency = 0.85
+glassSheen.BorderSizePixel = 0
+local sheenCorner = Instance.new("UICorner", glassSheen)
+sheenCorner.CornerRadius = UDim.new(0, 24)
+local sheenGrad = Instance.new("UIGradient", glassSheen)
+sheenGrad.Rotation = 90
+sheenGrad.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0.00, 0.08),
+    NumberSequenceKeypoint.new(0.45, 0.84),
+    NumberSequenceKeypoint.new(1.00, 1.00)
+})
+
+-- Top & Bottom Specular Edge Highlights
+local topSpecular = Instance.new("Frame", island)
+topSpecular.Size = UDim2.new(1, -68, 0, 1.5)
+topSpecular.AnchorPoint = Vector2.new(0.5, 0)
+topSpecular.Position = UDim2.new(0.5, 0, 0, 0)
+topSpecular.BackgroundColor3 = Color3.new(1, 1, 1)
+topSpecular.BackgroundTransparency = 0.04
+topSpecular.BorderSizePixel = 0
+Instance.new("UICorner", topSpecular).CornerRadius = UDim.new(1, 0)
+local topSpecGrad = Instance.new("UIGradient", topSpecular)
+topSpecGrad.Color = ColorSequence.new({
+    csk(0.00, rgb(14, 20, 34)),
+    csk(0.28, rgb(0, 245, 210)),
+    csk(0.50, rgb(255, 255, 255)),
+    csk(0.72, rgb(155, 95, 255)),
+    csk(1.00, rgb(14, 20, 34))
+})
+
+local bottomSpecular = Instance.new("Frame", island)
+bottomSpecular.Size = UDim2.new(1, -96, 0, 1)
+bottomSpecular.AnchorPoint = Vector2.new(0.5, 1)
+bottomSpecular.Position = UDim2.new(0.5, 0, 1, 0)
+bottomSpecular.BackgroundColor3 = Color3.new(1, 1, 1)
+bottomSpecular.BackgroundTransparency = 0.38
+bottomSpecular.BorderSizePixel = 0
+local botSpecGrad = Instance.new("UIGradient", bottomSpecular)
+botSpecGrad.Color = ColorSequence.new({
+    csk(0.00, rgb(14, 20, 34)),
+    csk(0.50, rgb(150, 95, 255)),
+    csk(1.00, rgb(14, 20, 34))
+})
+
+-- Outer Smooth Rotating Dual-Color Border
+local cStroke = Instance.new("UIStroke", island)
+cStroke.Thickness = 1.65
+cStroke.Color = Color3.new(1, 1, 1)
+cStroke.Transparency = 1
+local cStrokeGrad = Instance.new("UIGradient", cStroke)
+cStrokeGrad.Color = ColorSequence.new({
+    csk(0.0, rgb(0, 240, 205)),
+    csk(0.5, rgb(150, 90, 255)),
+    csk(1.0, rgb(0, 240, 205))
+})
+
+-- STAGE 1 & 3: Dynamic Island Capsule Content
+local capsuleWrap = Instance.new("Frame", island)
+capsuleWrap.Size = UDim2.fromScale(1, 1)
+capsuleWrap.BackgroundTransparency = 1
+capsuleWrap.ZIndex = 10
+
+local capLayout = Instance.new("UIListLayout", capsuleWrap)
+capLayout.FillDirection = Enum.FillDirection.Horizontal
+capLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+capLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+capLayout.Padding = UDim.new(0, 7)
+
+local capDot = Instance.new("Frame", capsuleWrap)
+capDot.Size = UDim2.fromOffset(7, 7)
+capDot.BackgroundColor3 = rgb(0, 240, 205)
+capDot.BackgroundTransparency = 1
+capDot.BorderSizePixel = 0
+capDot.LayoutOrder = 1
+Instance.new("UICorner", capDot).CornerRadius = UDim.new(1, 0)
+
+local capDotRing = Instance.new("Frame", capsuleWrap)
+capDotRing.AnchorPoint = Vector2.new(0.5, 0.5)
+capDotRing.Size = UDim2.fromOffset(7, 7)
+capDotRing.Position = UDim2.fromScale(0, 0.5)
+capDotRing.BackgroundTransparency = 1
+capDotRing.BorderSizePixel = 0
+capDotRing.ZIndex = 9
+Instance.new("UICorner", capDotRing).CornerRadius = UDim.new(1, 0)
+local capDotRingStroke = Instance.new("UIStroke", capDotRing)
+capDotRingStroke.Thickness = 1
+capDotRingStroke.Color = rgb(0, 240, 205)
+capDotRingStroke.Transparency = 1
+
+local capsuleTitle = Instance.new("TextLabel", capsuleWrap)
+capsuleTitle.AutomaticSize = Enum.AutomaticSize.X
+capsuleTitle.Size = UDim2.fromOffset(0, 34)
+capsuleTitle.BackgroundTransparency = 1
+capsuleTitle.TextTransparency = 1
+capsuleTitle.Text = "TXR // RECHAT"
+capsuleTitle.TextColor3 = Color3.new(1, 1, 1)
+capsuleTitle.Font = Enum.Font.GothamBlack
+capsuleTitle.TextSize = 10.5
+capsuleTitle.LayoutOrder = 2
+
+-- STAGE 2: Expanded Frosted Glass Card Content
+local expandedWrap = Instance.new("Frame", island)
+expandedWrap.Size = UDim2.fromScale(1, 1)
+expandedWrap.BackgroundTransparency = 1
+expandedWrap.Visible = false
+expandedWrap.ZIndex = 5
+
+local lightSweep = Instance.new("Frame", expandedWrap)
+lightSweep.Size = UDim2.fromScale(1, 1)
+lightSweep.BackgroundColor3 = Color3.new(1, 1, 1)
+lightSweep.BackgroundTransparency = 0
+lightSweep.BorderSizePixel = 0
+lightSweep.ZIndex = 5
+Instance.new("UICorner", lightSweep).CornerRadius = UDim.new(0, 20)
+local sweepGrad = Instance.new("UIGradient", lightSweep)
+sweepGrad.Rotation = 22
+sweepGrad.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0.00, 1.00),
+    NumberSequenceKeypoint.new(0.42, 1.00),
+    NumberSequenceKeypoint.new(0.50, 0.85),
+    NumberSequenceKeypoint.new(0.58, 1.00),
+    NumberSequenceKeypoint.new(1.00, 1.00)
+})
+
+-- 1. TOP BAR
+local topBar = Instance.new("Frame", expandedWrap)
+topBar.Size = UDim2.new(1, -36, 0, 22)
+topBar.Position = UDim2.fromOffset(18, 13)
+topBar.BackgroundTransparency = 1
+topBar.ZIndex = 7
+
+local topPill = Instance.new("Frame", topBar)
+topPill.AutomaticSize = Enum.AutomaticSize.X
+topPill.Size = UDim2.fromOffset(0, 20)
+topPill.AnchorPoint = Vector2.new(0, 0.5)
+topPill.Position = UDim2.fromScale(0, 0.5)
+topPill.BackgroundColor3 = rgb(16, 30, 46)
+topPill.BackgroundTransparency = 1
+topPill.ZIndex = 7
+Instance.new("UICorner", topPill).CornerRadius = UDim.new(1, 0)
+
+local topPillScale = Instance.new("UIScale", topPill)
+topPillScale.Scale = 1
+
+local pillPad = Instance.new("UIPadding", topPill)
+pillPad.PaddingLeft = UDim.new(0, 9)
+pillPad.PaddingRight = UDim.new(0, 10)
+
+local pillLayout = Instance.new("UIListLayout", topPill)
+pillLayout.FillDirection = Enum.FillDirection.Horizontal
+pillLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+pillLayout.Padding = UDim.new(0, 5)
+
+local tpStroke = Instance.new("UIStroke", topPill)
+tpStroke.Thickness = 1
+tpStroke.Color = rgb(0, 235, 200)
+tpStroke.Transparency = 1
+
+local statusDot = Instance.new("Frame", topPill)
+statusDot.Size = UDim2.fromOffset(5.5, 5.5)
+statusDot.BackgroundColor3 = rgb(0, 235, 200)
+statusDot.BackgroundTransparency = 1
+statusDot.BorderSizePixel = 0
+statusDot.LayoutOrder = 1
+statusDot.ZIndex = 8
+Instance.new("UICorner", statusDot).CornerRadius = UDim.new(1, 0)
+
+local tpTxt = Instance.new("TextLabel", topPill)
+tpTxt.AutomaticSize = Enum.AutomaticSize.X
+tpTxt.Size = UDim2.fromOffset(0, 20)
+tpTxt.BackgroundTransparency = 1
+tpTxt.TextTransparency = 1
+tpTxt.Text = sc("INITIALIZING")
+tpTxt.TextColor3 = rgb(0, 235, 200)
+tpTxt.Font = Enum.Font.GothamBlack
+tpTxt.TextSize = 8.4
+tpTxt.LayoutOrder = 2
+tpTxt.ZIndex = 8
+
+local verBadge = Instance.new("TextLabel", topBar)
+verBadge.Size = UDim2.fromOffset(78, 20)
+verBadge.AnchorPoint = Vector2.new(1, 0.5)
+verBadge.Position = UDim2.fromScale(1, 0.5)
+verBadge.BackgroundColor3 = rgb(18, 24, 38)
+verBadge.BackgroundTransparency = 1
+verBadge.TextTransparency = 1
+verBadge.Text = sc("V39.6") .. " • " .. sc("LIVE")
+verBadge.TextColor3 = rgb(155, 175, 205)
+verBadge.Font = Enum.Font.Code
+verBadge.TextSize = 9.0
+verBadge.ZIndex = 8
+Instance.new("UICorner", verBadge).CornerRadius = UDim.new(1, 0)
+
+local function updateStatusPill(newText, isReady)
+    if not tpTxt or not tpTxt.Parent then return end
+    tw(tpTxt, 0.11, Enum.EasingStyle.Quad, nil, { TextTransparency = 0.7 })
+    tw(topPillScale, 0.14, Enum.EasingStyle.Back, nil, { Scale = 1.05 })
+    task.delay(0.10, function()
+        if not tpTxt or not tpTxt.Parent then return end
+        tpTxt.Text = sc(newText)
+        if isReady then
+            local green = rgb(45, 235, 135)
+            tw(tpTxt, 0.18, Enum.EasingStyle.Quad, nil, { TextColor3 = green })
+            tw(statusDot, 0.18, Enum.EasingStyle.Quad, nil, { BackgroundColor3 = green })
+            tw(tpStroke, 0.18, Enum.EasingStyle.Quad, nil, { Color = green })
+        end
+        tw(tpTxt, 0.15, Enum.EasingStyle.Quad, nil, { TextTransparency = 0 })
+        tw(topPillScale, 0.18, Enum.EasingStyle.Quint, nil, { Scale = 1.0 })
+    end)
+end
+
+-- 2. CENTER HERO SECTION
+local heroRow = Instance.new("Frame", expandedWrap)
+heroRow.Size = UDim2.new(1, -36, 0, 56)
+heroRow.Position = UDim2.fromOffset(18, 44)
+heroRow.BackgroundTransparency = 1
+heroRow.ZIndex = 7
+
+local iconRing = Instance.new("Frame", heroRow)
+iconRing.Size = UDim2.fromOffset(54, 54)
+iconRing.AnchorPoint = Vector2.new(0, 0.5)
+iconRing.Position = UDim2.fromScale(0, 0.5)
+iconRing.BackgroundColor3 = Color3.new(1, 1, 1)
+iconRing.BackgroundTransparency = 1
+iconRing.ZIndex = 7
+Instance.new("UICorner", iconRing).CornerRadius = UDim.new(0, 14)
+local iconRingGrad = Instance.new("UIGradient", iconRing)
+iconRingGrad.Color = ColorSequence.new({
+    csk(0.0, rgb(0, 240, 205)),
+    csk(0.5, rgb(150, 90, 255)),
+    csk(1.0, rgb(0, 240, 205))
+})
+
+local iconInner = Instance.new("Frame", iconRing)
+iconInner.Size = UDim2.fromOffset(50, 50)
+iconInner.AnchorPoint = Vector2.new(0.5, 0.5)
+iconInner.Position = UDim2.fromScale(0.5, 0.5)
+iconInner.BackgroundColor3 = rgb(12, 16, 26)
+iconInner.BackgroundTransparency = 1
+iconInner.ClipsDescendants = true
+iconInner.ZIndex = 8
+Instance.new("UICorner", iconInner).CornerRadius = UDim.new(0, 12)
+
+local iconImg = Instance.new("ImageLabel", iconInner)
+iconImg.Size = UDim2.fromScale(1.12, 1.12)
+iconImg.Position = UDim2.fromScale(-0.06, -0.06)
+iconImg.BackgroundTransparency = 1
+iconImg.Image = "rbxassetid://79059905046105"
+iconImg.ImageTransparency = 1
+iconImg.ScaleType = Enum.ScaleType.Crop
+iconImg.ZIndex = 9
+Instance.new("UICorner", iconImg).CornerRadius = UDim.new(0, 12)
+
+local titleShadow = Instance.new("TextLabel", heroRow)
+titleShadow.Size = UDim2.new(1, -66, 0, 28)
+titleShadow.Position = UDim2.fromOffset(66, 6)
+titleShadow.BackgroundTransparency = 1
+titleShadow.TextTransparency = 1
+titleShadow.Text = "TXR // RECHAT"
+titleShadow.TextColor3 = rgb(0, 0, 0)
+titleShadow.Font = Enum.Font.Michroma
+titleShadow.TextSize = 19.5
+titleShadow.TextXAlignment = Enum.TextXAlignment.Left
+titleShadow.ZIndex = 6
+
+local mainTitle = Instance.new("TextLabel", heroRow)
+mainTitle.Size = UDim2.new(1, -66, 0, 28)
+mainTitle.Position = UDim2.fromOffset(66, 4)
+mainTitle.BackgroundTransparency = 1
+mainTitle.TextTransparency = 1
+mainTitle.Text = "TXR // RECHAT"
+mainTitle.TextColor3 = Color3.new(1, 1, 1)
+mainTitle.Font = Enum.Font.Michroma
+mainTitle.TextSize = 19.5
+mainTitle.TextXAlignment = Enum.TextXAlignment.Left
+mainTitle.ZIndex = 7
+
+local titleGrad = Instance.new("UIGradient", mainTitle)
+titleGrad.Color = ColorSequence.new({
+    csk(0.0, rgb(0, 245, 210)),
+    csk(0.5, rgb(255, 255, 255)),
+    csk(1.0, rgb(155, 95, 255))
+})
+
+local subTitle = Instance.new("TextLabel", heroRow)
+subTitle.Size = UDim2.new(1, -66, 0, 16)
+subTitle.Position = UDim2.fromOffset(66, 33)
+subTitle.BackgroundTransparency = 1
+subTitle.TextTransparency = 1
+subTitle.Text = sc("BY ASHU") .. "  •  " .. sc("EMP CLAN GLASS ENGINE")
+subTitle.TextColor3 = rgb(175, 194, 224)
+subTitle.Font = Enum.Font.GothamBold
+subTitle.TextSize = 9.2
+subTitle.TextXAlignment = Enum.TextXAlignment.Left
+subTitle.ZIndex = 7
+
+-- 3. SUBTLE GLASS SEPARATOR LINE
+local midDivider = Instance.new("Frame", expandedWrap)
+midDivider.Size = UDim2.new(1, -36, 0, 1)
+midDivider.Position = UDim2.fromOffset(18, 108)
+midDivider.BackgroundColor3 = rgb(255, 255, 255)
+midDivider.BackgroundTransparency = 1
+midDivider.BorderSizePixel = 0
+midDivider.ZIndex = 7
+
+local midDividerGrad = Instance.new("UIGradient", midDivider)
+midDividerGrad.Color = ColorSequence.new({
+    csk(0.0, rgb(255, 255, 255)),
+    csk(0.5, rgb(0, 240, 205)),
+    csk(1.0, rgb(255, 255, 255))
+})
+midDividerGrad.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0.0, 0.3),
+    NumberSequenceKeypoint.new(0.5, 0.95),
+    NumberSequenceKeypoint.new(1.0, 0.3)
+})
+
+-- 4. BOTTOM FOOTER
+local footerWrap = Instance.new("Frame", expandedWrap)
+footerWrap.Size = UDim2.new(1, -36, 0, 30)
+footerWrap.AnchorPoint = Vector2.new(0.5, 1)
+footerWrap.Position = UDim2.new(0.5, 0, 1, -12)
+footerWrap.BackgroundTransparency = 1
+footerWrap.ZIndex = 7
+
+local detailLbl = Instance.new("TextLabel", footerWrap)
+detailLbl.Size = UDim2.new(1, -44, 0, 14)
+detailLbl.Position = UDim2.fromOffset(0, 0)
+detailLbl.BackgroundTransparency = 1
+detailLbl.TextTransparency = 1
+detailLbl.Text = sc("Establishing encrypted socket...")
+detailLbl.TextColor3 = rgb(155, 175, 205)
+detailLbl.Font = Enum.Font.GothamMedium
+detailLbl.TextSize = 9.0
+detailLbl.TextXAlignment = Enum.TextXAlignment.Left
+detailLbl.ZIndex = 8
+
+local pctLbl = Instance.new("TextLabel", footerWrap)
+pctLbl.Size = UDim2.fromOffset(40, 14)
+pctLbl.AnchorPoint = Vector2.new(1, 0)
+pctLbl.Position = UDim2.fromScale(1, 0)
+pctLbl.BackgroundTransparency = 1
+pctLbl.TextTransparency = 1
+pctLbl.Text = "0%"
+pctLbl.TextColor3 = rgb(0, 235, 200)
+pctLbl.Font = Enum.Font.Code
+pctLbl.TextSize = 9.8
+pctLbl.TextXAlignment = Enum.TextXAlignment.Right
+pctLbl.ZIndex = 8
+
+local progBg = Instance.new("Frame", footerWrap)
+progBg.Size = UDim2.new(1, 0, 0, 4.5)
+progBg.AnchorPoint = Vector2.new(0, 1)
+progBg.Position = UDim2.fromScale(0, 1)
+progBg.BackgroundColor3 = rgb(18, 25, 38)
+progBg.BackgroundTransparency = 1
+progBg.BorderSizePixel = 0
+progBg.ClipsDescendants = true
+progBg.ZIndex = 7
+Instance.new("UICorner", progBg).CornerRadius = UDim.new(1, 0)
+
+local progFill = Instance.new("Frame", progBg)
+progFill.Size = UDim2.fromScale(0, 1)
+progFill.BackgroundColor3 = Color3.new(1, 1, 1)
+progFill.BorderSizePixel = 0
+progFill.ZIndex = 8
+Instance.new("UICorner", progFill).CornerRadius = UDim.new(1, 0)
+local pfGrad = Instance.new("UIGradient", progFill)
+pfGrad.Color = ColorSequence.new({
+    csk(0.0, rgb(0, 240, 205)),
+    csk(1.0, rgb(150, 95, 255))
+})
+
+local progTip = Instance.new("Frame", progFill)
+progTip.Size = UDim2.fromOffset(10, 4.5)
+progTip.AnchorPoint = Vector2.new(1, 0.5)
+progTip.Position = UDim2.fromScale(1, 0.5)
+progTip.BackgroundColor3 = Color3.new(1, 1, 1)
+progTip.BorderSizePixel = 0
+progTip.ZIndex = 9
+Instance.new("UICorner", progTip).CornerRadius = UDim.new(1, 0)
+
+local progTipGlow = Instance.new("ImageLabel", progFill)
+progTipGlow.AnchorPoint = Vector2.new(1, 0.5)
+progTipGlow.Position = UDim2.fromScale(1, 0.5)
+progTipGlow.Size = UDim2.fromOffset(26, 26)
+progTipGlow.BackgroundTransparency = 1
+progTipGlow.Image = "rbxassetid://5028857084"
+progTipGlow.ImageColor3 = rgb(0, 240, 205)
+progTipGlow.ImageTransparency = 1
+progTipGlow.ZIndex = 9
+
+-- High-FPS Zero-Allocation Render Loop
+local rClk, lastPct = 0, -1
+local rotConn = Svc.Run.RenderStepped:Connect(function(dt)
+    if not introGui or not introGui.Parent then return end
+    rClk += dt
+    local rot = (rClk * 65) % 360
+    cStrokeGrad.Rotation = rot
+    iconRingGrad.Rotation = -rot
+    titleGrad.Offset = Vector2.new(math.sin(rClk * 2.0) * 0.38, 0)
+    topSpecGrad.Offset = Vector2.new(math.sin(rClk * 1.8) * 0.25, 0)
+    sweepGrad.Offset = Vector2.new(((rClk * 0.45) % 2.8) - 1.4, 0)
+    midDividerGrad.Offset = Vector2.new(((rClk * 0.30) % 2.4) - 1.2, 0)
+
+    local pulse = 0.15 + ((math.sin(rClk * 6) + 1) * 0.275)
+    statusDot.BackgroundTransparency = pulse
+    if capsuleWrap.Visible then
+        capDot.BackgroundTransparency = pulse
+    end
+
+    local ringCycle = rClk % 1.4
+    local ringProg = ringCycle / 1.4
+    if capsuleWrap.Visible then
+        local ringSize = 7 + ringProg * 16
+        capDotRing.Size = UDim2.fromOffset(ringSize, ringSize)
+        capDotRing.BackgroundTransparency = 1
+        capDotRingStroke.Transparency = 0.15 + ringProg * 0.85
+    end
+
+    for _, pdata in ipairs(particles) do
+        local t = rClk * pdata.speed + pdata.phase
+        pdata.inst.Position = UDim2.fromScale(
+            pdata.baseX + math.sin(t) * pdata.amp,
+            pdata.baseY + math.cos(t * 0.7) * pdata.amp
+        )
+    end
+
+    syncShadow()
+
+    if expandedWrap.Visible then
+        local pct = math.floor(math.clamp(progFill.Size.X.Scale * 100, 0, 100) + 0.5)
+        if pct ~= lastPct then
+            lastPct = pct
+            pctLbl.Text = pct .. "%"
+        end
+    end
+end)
+
+-- =========================================================
+-- 🎬 STAGE 0 (0.0s -> 0.25s): AMBIENT GLOW WAKES UP FIRST
+-- =========================================================
+tw(ambientGlow, 0.60, Enum.EasingStyle.Sine, nil, { ImageTransparency = 0.82 })
+for _, pdata in ipairs(particles) do
+    tw(pdata.inst, 0.5 + math.random(0, 30) / 100, Enum.EasingStyle.Sine, nil, { BackgroundTransparency = 0.55 })
+end
+task.wait(0.22)
+
+-- =========================================================
+-- 🎬 STAGE 1 (0.25s -> 1.10s): DYNAMIC ISLAND DROP + TACTILE BREATH
+-- =========================================================
+playUiTick("rbxassetid://9114223177", 0.50, 1.0)
+tw(backdrop, 0.45, nil, nil, { BackgroundTransparency = 0.42 })
+tw(islandShadow, 0.45, Enum.EasingStyle.Sine, nil, { ImageTransparency = 0.7 })
+tw(island, 0.58, Enum.EasingStyle.Back, nil, { Position = UDim2.fromScale(0.5, 0.5), BackgroundTransparency = 0.20 })
+tw(islandScale, 0.58, Enum.EasingStyle.Back, nil, { Scale = 1 })
+tw(cStroke, 0.45, nil, nil, { Transparency = 0.14 })
+tw(rimStroke, 0.45, nil, nil, { Transparency = 0.74 })
+tw(capDot, 0.35, nil, nil, { BackgroundTransparency = 0.1 })
+tw(capsuleTitle, 0.35, nil, nil, { TextTransparency = 0 })
+
+task.wait(0.55)
+tw(islandScale, 0.16, Enum.EasingStyle.Sine, nil, { Scale = 1.05 })
+task.wait(0.16)
+tw(islandScale, 0.20, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, { Scale = 0.985 })
+task.wait(0.20)
+tw(islandScale, 0.14, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, { Scale = 1.0 })
+task.wait(0.14)
+
+-- =========================================================
+-- 🎬 STAGE 2 (1.10s -> 1.85s): SILKY EXPANSION INTO FROSTED GLASS CARD
+-- =========================================================
+playUiTick("rbxassetid://6518811702", 0.35, 1.15)
+tw(capsuleTitle, 0.16, Enum.EasingStyle.Quad, nil, { TextTransparency = 1 })
+tw(capDot, 0.16, nil, nil, { BackgroundTransparency = 1 })
+tw(capDotRingStroke, 0.16, nil, nil, { Transparency = 1 })
+
+task.wait(0.14)
+capsuleWrap.Visible = false
+expandedWrap.Visible = true
+
+tw(island, 0.65, nil, nil, { Size = UDim2.fromOffset(386, 162), BackgroundTransparency = 0.26 })
+tw(islandCorner, 0.65, nil, nil, { CornerRadius = UDim.new(0, 20) })
+tw(rimCorner, 0.65, nil, nil, { CornerRadius = UDim.new(0, 19) })
+tw(sheenCorner, 0.65, nil, nil, { CornerRadius = UDim.new(0, 20) })
+tw(ambientGlow, 0.65, Enum.EasingStyle.Sine, nil, { Size = UDim2.fromOffset(760, 760), ImageTransparency = 0.74 })
+
+task.wait(0.14)
+tw(topPill, 0.36, nil, nil, { BackgroundTransparency = 0.30 })
+tw(tpStroke, 0.36, nil, nil, { Transparency = 0.36 })
+tw(statusDot, 0.36, nil, nil, { BackgroundTransparency = 0.1 })
+tw(tpTxt, 0.36, nil, nil, { TextTransparency = 0 })
+tw(verBadge, 0.36, nil, nil, { BackgroundTransparency = 0.35, TextTransparency = 0 })
+
+task.wait(0.11)
+tw(iconRing, 0.40, nil, nil, { BackgroundTransparency = 0.05 })
+tw(iconInner, 0.40, nil, nil, { BackgroundTransparency = 0.05 })
+tw(iconImg, 0.42, Enum.EasingStyle.Quart, nil, { ImageTransparency = 0, Size = UDim2.fromScale(1, 1), Position = UDim2.fromScale(0, 0) })
+tw(mainTitle, 0.42, nil, nil, { TextTransparency = 0 })
+tw(titleShadow, 0.42, nil, nil, { TextTransparency = 0.65 })
+tw(subTitle, 0.42, nil, nil, { TextTransparency = 0 })
+
+task.wait(0.11)
+tw(midDivider, 0.36, nil, nil, { BackgroundTransparency = 0.90 })
+tw(detailLbl, 0.36, nil, nil, { TextTransparency = 0 })
+tw(pctLbl, 0.36, nil, nil, { TextTransparency = 0 })
+tw(progBg, 0.36, nil, nil, { BackgroundTransparency = 0.25 })
+tw(progTipGlow, 0.36, nil, nil, { ImageTransparency = 0.55 })
+
+-- =========================================================
+-- 🎬 STAGE 3 (1.85s -> 4.90s): 3.0s SMOOTH LOADING SEQUENCE, STAGGERED COPY
+-- =========================================================
+tw(progFill, 2.90, nil, nil, { Size = UDim2.fromScale(1, 1) })
+
+task.wait(0.95)
+updateStatusPill("SYNCING NETWORK", false)
+if detailLbl and detailLbl.Parent then
+    tw(detailLbl, 0.14, Enum.EasingStyle.Quad, nil, { TextTransparency = 0.8 })
+    task.delay(0.12, function()
+        if detailLbl and detailLbl.Parent then
+            detailLbl.Text = sc("Synchronizing global chat channels...")
+            tw(detailLbl, 0.18, Enum.EasingStyle.Quad, nil, { TextTransparency = 0 })
+        end
+    end)
+end
+
+task.wait(0.95)
+updateStatusPill("LOADING ASSETS", false)
+if detailLbl and detailLbl.Parent then
+    tw(detailLbl, 0.14, Enum.EasingStyle.Quad, nil, { TextTransparency = 0.8 })
+    task.delay(0.12, function()
+        if detailLbl and detailLbl.Parent then
+            detailLbl.Text = sc("Preparing glass interface & profile cache...")
+            tw(detailLbl, 0.18, Enum.EasingStyle.Quad, nil, { TextTransparency = 0 })
+        end
+    end)
+end
+
+task.wait(0.90)
+if tpTxt and tpTxt.Parent then
+    playUiTick("rbxassetid://6895079853", 0.45, 1.1)
+    updateStatusPill("SYSTEM READY", true)
+    if detailLbl and detailLbl.Parent then
+        tw(detailLbl, 0.14, Enum.EasingStyle.Quad, nil, { TextTransparency = 0.8 })
+        task.delay(0.12, function()
+            if detailLbl and detailLbl.Parent then
+                detailLbl.Text = sc("All modules online. Launching workspace...")
+                detailLbl.TextColor3 = rgb(45, 235, 135)
+                tw(detailLbl, 0.18, Enum.EasingStyle.Quad, nil, { TextTransparency = 0 })
+            end
+        end)
+    end
+    tw(pctLbl, 0.20, Enum.EasingStyle.Quad, nil, { TextColor3 = rgb(45, 235, 135) })
+    tw(progTipGlow, 0.20, Enum.EasingStyle.Quad, nil, { ImageColor3 = rgb(45, 235, 135) })
+    pfGrad.Color = ColorSequence.new({
+        csk(0.0, rgb(45, 235, 135)),
+        csk(1.0, rgb(0, 245, 210))
+    })
+    cStrokeGrad.Color = ColorSequence.new({
+        csk(0.0, rgb(45, 235, 135)),
+        csk(0.5, rgb(0, 245, 210)),
+        csk(1.0, rgb(45, 235, 135))
+    })
+    iconRingGrad.Color = cStrokeGrad.Color
+
+    local readyRipple = Instance.new("Frame", island)
+    readyRipple.AnchorPoint = Vector2.new(0.5, 0.5)
+    readyRipple.Position = UDim2.fromScale(0.5, 0.5)
+    readyRipple.Size = UDim2.fromOffset(10, 10)
+    readyRipple.BackgroundTransparency = 1
+    readyRipple.ZIndex = 20
+    Instance.new("UICorner", readyRipple).CornerRadius = UDim.new(1, 0)
+    local rippleStroke = Instance.new("UIStroke", readyRipple)
+    rippleStroke.Thickness = 2
+    rippleStroke.Color = rgb(45, 235, 135)
+    rippleStroke.Transparency = 0.1
+    tw(readyRipple, 0.55, Enum.EasingStyle.Quad, nil, { Size = UDim2.fromOffset(460, 190) })
+    tw(rippleStroke, 0.55, Enum.EasingStyle.Quad, nil, { Transparency = 1 })
+    task.delay(0.6, function() pcall(function() readyRipple:Destroy() end) end)
+end
+task.wait(0.45)
+
+-- =========================================================
+-- 🎬 STAGE 4 (4.90s -> 5.70s): SILKY COLLAPSE INTO ISLAND PILL & EXIT
+-- =========================================================
+tw(mainTitle, 0.20, nil, nil, { TextTransparency = 1 })
+tw(titleShadow, 0.20, nil, nil, { TextTransparency = 1 })
+tw(subTitle, 0.20, nil, nil, { TextTransparency = 1 })
+tw(iconRing, 0.20, nil, nil, { BackgroundTransparency = 1 })
+tw(iconInner, 0.20, nil, nil, { BackgroundTransparency = 1 })
+tw(iconImg, 0.20, nil, nil, { ImageTransparency = 1 })
+tw(topPill, 0.20, nil, nil, { BackgroundTransparency = 1 })
+tw(tpStroke, 0.20, nil, nil, { Transparency = 1 })
+tw(statusDot, 0.20, nil, nil, { BackgroundTransparency = 1 })
+tw(tpTxt, 0.20, nil, nil, { TextTransparency = 1 })
+tw(verBadge, 0.20, nil, nil, { BackgroundTransparency = 1, TextTransparency = 1 })
+tw(midDivider, 0.20, nil, nil, { BackgroundTransparency = 1 })
+tw(detailLbl, 0.20, nil, nil, { TextTransparency = 1 })
+tw(pctLbl, 0.20, nil, nil, { TextTransparency = 1 })
+tw(progBg, 0.20, nil, nil, { BackgroundTransparency = 1 })
+tw(progFill, 0.20, nil, nil, { BackgroundTransparency = 1 })
+tw(progTip, 0.20, nil, nil, { BackgroundTransparency = 1 })
+tw(progTipGlow, 0.20, nil, nil, { ImageTransparency = 1 })
+tw(ambientGlow, 0.30, nil, nil, { ImageTransparency = 1 })
+for _, pdata in ipairs(particles) do
+    tw(pdata.inst, 0.25, nil, nil, { BackgroundTransparency = 1 })
+end
+
+task.wait(0.18)
+expandedWrap.Visible = false
+capsuleWrap.Visible = true
+capDot.BackgroundColor3 = rgb(45, 235, 135)
+capsuleTitle.Text = sc("SYSTEM READY")
+capsuleTitle.TextColor3 = rgb(45, 235, 135)
+tw(capDot, 0.18, nil, nil, { BackgroundTransparency = 0.1 })
+tw(capsuleTitle, 0.18, nil, nil, { TextTransparency = 0 })
+
+tw(island, 0.36, nil, nil, { Size = UDim2.fromOffset(158, 32), BackgroundTransparency = 0.18 })
+tw(islandCorner, 0.36, nil, nil, { CornerRadius = UDim.new(0, 24) })
+tw(rimCorner, 0.36, nil, nil, { CornerRadius = UDim.new(0, 23) })
+
+task.wait(0.32)
+
+tw(island, 0.34, Enum.EasingStyle.Quad, Enum.EasingDirection.In, { Position = UDim2.new(0.5, 0, 0.34, 0), BackgroundTransparency = 1 })
+tw(islandScale, 0.34, Enum.EasingStyle.Quad, Enum.EasingDirection.In, { Scale = 0.90 })
+tw(islandShadow, 0.34, nil, nil, { ImageTransparency = 1 })
+tw(backdrop, 0.34, nil, nil, { BackgroundTransparency = 1 })
+tw(capDot, 0.26, nil, nil, { BackgroundTransparency = 1 })
+tw(capsuleTitle, 0.26, nil, nil, { TextTransparency = 1 })
+tw(cStroke, 0.28, nil, nil, { Transparency = 1 })
+tw(rimStroke, 0.28, nil, nil, { Transparency = 1 })
+tw(topSpecular, 0.28, nil, nil, { BackgroundTransparency = 1 })
+tw(bottomSpecular, 0.28, nil, nil, { BackgroundTransparency = 1 })
+tw(glassSheen, 0.28, nil, nil, { BackgroundTransparency = 1 })
+
+task.wait(0.36)
+if rotConn then rotConn:Disconnect() end
+if introGui and introGui.Parent then introGui:Destroy() end
+
+-- =========================================================
+-- 🚀 LAUNCH MAIN SCRIPT AFTER INTRO FINISHES
+-- =========================================================
+task.spawn(function()
+    local timeout = 0
+    while not fetchFinished and timeout < 3 do
+        timeout += task.wait(0.05)
+    end
+
+    if compiledMainFn then
+        compiledMainFn()
+    else
+        loadstring(game:HttpGet(MAIN_SCRIPT_URL))()
+    end
+end)
