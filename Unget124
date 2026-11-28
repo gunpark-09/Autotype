@@ -713,57 +713,12 @@ local S = {
     dragThresholdMet = false,
     lastTypingBroadcast = 0,
     lastSendTick = 0,
-    isSendingNow = false,
     activeProfileUser = nil,
     myRankNum = 1,
     myRankRowObj = nil,
     MY_VIP_ID = 9685785248,
     Admin = {}
 }
-
--- =========================================================
--- 🚀 TXR SAFE HTTP OUTBOUND QUEUE (ANTI-CRASH & MULTI-USER FLOOD GUARD)
--- Prevents concurrent HTTP connection spikes on mobile executors & Render backend
--- when many players chat simultaneously.
--- =========================================================
-local OutboundQueue = {}
-local OutboundWorkerActive = false
-
-local function enqueueServerPost(payloadJson)
-    if not S.req or not payloadJson then return end
-    if #OutboundQueue >= 120 then
-        table.remove(OutboundQueue, 1)
-    end
-    table.insert(OutboundQueue, payloadJson)
-    if OutboundWorkerActive then return end
-    OutboundWorkerActive = true
-
-    task.spawn(function()
-        while #OutboundQueue > 0 and _G.TXR_ChatInstanceID == currentExecutionID do
-            local nextPayload = table.remove(OutboundQueue, 1)
-            if nextPayload then
-                local delivered = false
-                for attempt = 1, 2 do
-                    local ok, res = pcall(function()
-                        return S.req({
-                            Url = S.SERVER_URL .. "/send",
-                            Method = "POST",
-                            Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-                            Body = nextPayload
-                        })
-                    end)
-                    if ok and res and (res.StatusCode == 200 or res.Status == 200 or res.Success) then
-                        delivered = true
-                        break
-                    end
-                    if attempt == 1 then task.wait(0.22) end
-                end
-            end
-            task.wait(0.03)
-        end
-        OutboundWorkerActive = false
-    end)
-end
 
 -- =========================================================
 -- 🔐 HARDENED MULTI-LAYER OWNER & PACKET SECURITY GUARD
@@ -1478,29 +1433,45 @@ local function broadcastMyProfileStyle()
     refreshUserAvatarsInFeed(myLow)
     saveGlobalProfilesDB()
 
-    pcall(function()
-        local encodedBio = S.myBio:gsub("|", " "):gsub("\n", " ")
-        local encodedMood = S.myMood:gsub("|", " ")
-        local cleanAv = S.myCustomAvatar:gsub("|", "")
-        local cleanBan = S.myCustomBanner:gsub("|", "")
-        enqueueServerPost(Svc.Http:JSONEncode({
-            user = lp.Name .. "::" .. lp.DisplayName,
-            msg = string.format("__PROF_STYLE__:%d|%s|%s|%s|%s", S.myProfileColorIdx, encodedMood, cleanAv, cleanBan, encodedBio),
-            jobId = game.JobId,
-            hidden = true
-        }))
-        enqueueServerPost(Svc.Http:JSONEncode({
-            user = lp.Name .. "::" .. lp.DisplayName,
-            msg = string.format("__FOL_RANK__:%d|%s", myFolCount, tostring(lp.UserId)),
-            jobId = game.JobId,
-            hidden = true
-        }))
-        enqueueServerPost(Svc.Http:JSONEncode({
-            user = lp.Name .. "::" .. lp.DisplayName,
-            msg = string.format("__TAG_SET__:%s|%s", tostring(S.currentOwnerBadge), tostring(lp.UserId)),
-            jobId = game.JobId,
-            hidden = true
-        }))
+    task.spawn(function()
+        if S.req then
+            pcall(function()
+                local encodedBio = S.myBio:gsub("|", " "):gsub("\n", " ")
+                local encodedMood = S.myMood:gsub("|", " ")
+                local cleanAv = S.myCustomAvatar:gsub("|", "")
+                local cleanBan = S.myCustomBanner:gsub("|", "")
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({
+                        user = lp.Name .. "::" .. lp.DisplayName,
+                        msg = string.format("__PROF_STYLE__:%d|%s|%s|%s|%s", S.myProfileColorIdx, encodedMood, cleanAv, cleanBan, encodedBio),
+                        jobId = game.JobId,
+                        hidden = true
+                    })
+                })
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({
+                        user = lp.Name .. "::" .. lp.DisplayName,
+                        msg = string.format("__FOL_RANK__:%d|%s", myFolCount, tostring(lp.UserId)),
+                        jobId = game.JobId,
+                        hidden = true
+                    })
+                })
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({
+                        user = lp.Name .. "::" .. lp.DisplayName,
+                        msg = string.format("__TAG_SET__:%s|%s", tostring(S.currentOwnerBadge), tostring(lp.UserId)),
+                        jobId = game.JobId,
+                        hidden = true
+                    })
+                })
+            end)
+        end
     end)
 end
 
@@ -1533,13 +1504,21 @@ local function broadcastTargetFollowerOverride(targetUser, newCountVal)
     if not isVerifiedOwner(lp.Name:lower(), lp.UserId) then return end
     local tLow = targetUser:lower()
     local tUid = S.userIdCache[tLow] or 0
-    pcall(function()
-        enqueueServerPost(Svc.Http:JSONEncode({
-            user = lp.Name .. "::" .. lp.DisplayName,
-            msg = string.format("__FOL_SET__:%s|%d|%s|%s", tLow, newCountVal, tostring(tUid), tostring(lp.UserId)),
-            jobId = game.JobId,
-            hidden = true
-        }))
+    task.spawn(function()
+        if S.req then
+            pcall(function()
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({
+                        user = lp.Name .. "::" .. lp.DisplayName,
+                        msg = string.format("__FOL_SET__:%s|%d|%s|%s", tLow, newCountVal, tostring(tUid), tostring(lp.UserId)),
+                        jobId = game.JobId,
+                        hidden = true
+                    })
+                })
+            end)
+        end
     end)
 end
 
@@ -1626,7 +1605,7 @@ end
 
 local function sanitizeXml(str)
     if not str then return "" end
-    return (tostring(str):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"):gsub("'", "&apos;"))
+    return (str:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"):gsub("'", "&apos;"))
 end
 
 -- =========================================================
@@ -1809,15 +1788,15 @@ local function applySpringHover(btn)
     local origTrans = btn.BackgroundTransparency
     local hoverTrans = math.max(0, origTrans - 0.15)
     btn.MouseEnter:Connect(function()
-        Svc.Tween:Create(btnScale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1.05}):Play()
-        Svc.Tween:Create(btn, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {BackgroundTransparency = hoverTrans}):Play()
+        Svc.Tween:Create(btnScale, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1.05}):Play()
+        Svc.Tween:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {BackgroundTransparency = hoverTrans}):Play()
     end)
     btn.MouseLeave:Connect(function()
-        Svc.Tween:Create(btnScale, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1}):Play()
-        Svc.Tween:Create(btn, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {BackgroundTransparency = origTrans}):Play()
+        Svc.Tween:Create(btnScale, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1}):Play()
+        Svc.Tween:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {BackgroundTransparency = origTrans}):Play()
     end)
-    btn.MouseButton1Down:Connect(function() Svc.Tween:Create(btnScale, TweenInfo.new(0.08, Enum.EasingStyle.Sine), {Scale = 0.94}):Play() end)
-    btn.MouseButton1Up:Connect(function() Svc.Tween:Create(btnScale, TweenInfo.new(0.26, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1.05}):Play() end)
+    btn.MouseButton1Down:Connect(function() Svc.Tween:Create(btnScale, TweenInfo.new(0.1, Enum.EasingStyle.Sine), {Scale = 0.94}):Play() end)
+    btn.MouseButton1Up:Connect(function() Svc.Tween:Create(btnScale, TweenInfo.new(0.3, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1.05}):Play() end)
 end
 
 local function playSFX(soundType)
@@ -3279,31 +3258,38 @@ do
 
             triggerGlobalDynamicIslandBroadcast(selectedBStyle, rawTxt)
 
-            enqueueServerPost(Svc.Http:JSONEncode({
-                user = lp.Name .. "::" .. tostring(lp.UserId),
-                msg = string.format("%s%s:%s] %s", BROADCAST_TAG_PREFIX, bId, selectedBStyle, rawTxt),
-                jobId = game.JobId,
-                hidden = true
-            }))
-
             task.spawn(function()
-                if S.req and S.DISCORD_WEBHOOK_URL and S.DISCORD_WEBHOOK_URL ~= "" then
+                if S.req then
                     pcall(function()
                         S.req({
-                            Url = S.DISCORD_WEBHOOK_URL, Method = "POST",
-                            Headers = { ["Content-Type"] = "application/json" },
+                            Url = S.SERVER_URL .. "/send", Method = "POST",
+                            Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
                             Body = Svc.Http:JSONEncode({
-                                username = "👑 ᴀꜱʜᴜ ɢʟᴏʙᴀʟ ʙʀᴏᴀᴅᴄᴀꜱᴛ",
-                                embeds = {{
-                                    title = "📡 ᴏꜰꜰɪᴄɪᴀʟ ɢʟᴏʙᴀʟ ᴀɴɴᴏᴜɴᴄᴇᴍᴇɴᴛ (" .. selectedBStyle .. ")",
-                                    description = rawTxt,
-                                    color = 16766720
-                                }}
+                                user = lp.Name .. "::" .. tostring(lp.UserId),
+                                msg = string.format("%s%s:%s] %s", BROADCAST_TAG_PREFIX, bId, selectedBStyle, rawTxt),
+                                jobId = game.JobId,
+                                hidden = true
                             })
                         })
                     end)
+                    if S.DISCORD_WEBHOOK_URL and S.DISCORD_WEBHOOK_URL ~= "" then
+                        pcall(function()
+                            S.req({
+                                Url = S.DISCORD_WEBHOOK_URL, Method = "POST",
+                                Headers = { ["Content-Type"] = "application/json" },
+                                Body = Svc.Http:JSONEncode({
+                                    username = "👑 ᴀꜱʜᴜ ɢʟᴏʙᴀʟ ʙʀᴏᴀᴅᴄᴀꜱᴛ",
+                                    embeds = {{
+                                        title = "📡 ᴏꜰꜰɪᴄɪᴀʟ ɢʟᴏʙᴀʟ ᴀɴɴᴏᴜɴᴄᴇᴍᴇɴᴛ (" .. selectedBStyle .. ")",
+                                        description = rawTxt,
+                                        color = 16766720
+                                    }}
+                                })
+                            })
+                        end)
+                    end
                 end
-                task.wait(1.0)
+                task.wait(1.2)
                 if fireBroadcastBtn and fireBroadcastBtn.Parent then
                     fireBroadcastBtn.Text = sc("SEND LIVE")
                 end
@@ -3349,13 +3335,21 @@ local function setGlobalMuteState(targetUsername, muteBool, broadcastToNet)
     end
 
     if broadcastToNet and isVerifiedOwner(lp.Name:lower(), lp.UserId) then
-        pcall(function()
-            enqueueServerPost(Svc.Http:JSONEncode({
-                user = lp.Name .. "::" .. lp.DisplayName,
-                msg = string.format("__MUTE_SET__:%s|%s|%s", tLow, muteBool and "1" or "0", tostring(lp.UserId)),
-                jobId = game.JobId,
-                hidden = true
-            }))
+        task.spawn(function()
+            if S.req then
+                pcall(function()
+                    S.req({
+                        Url = S.SERVER_URL .. "/send", Method = "POST",
+                        Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                        Body = Svc.Http:JSONEncode({
+                            user = lp.Name .. "::" .. lp.DisplayName,
+                            msg = string.format("__MUTE_SET__:%s|%s|%s", tLow, muteBool and "1" or "0", tostring(lp.UserId)),
+                            jobId = game.JobId,
+                            hidden = true
+                        })
+                    })
+                end)
+            end
         end)
     end
 end
@@ -4711,19 +4705,31 @@ do
         local myLow = lp.Name:lower()
         local myFolCount = getFollowerCountForUser(myLow)
         local tgtFolCount = getFollowerCountForUser(targetLower)
-        pcall(function()
-            enqueueServerPost(Svc.Http:JSONEncode({
-                user = lp.Name .. "::" .. lp.DisplayName,
-                msg = string.format("__FOLLOW__:%s|%s", targetLower, stateBool and "1" or "0"),
-                jobId = game.JobId,
-                hidden = true
-            }))
-            enqueueServerPost(Svc.Http:JSONEncode({
-                user = lp.Name .. "::" .. lp.DisplayName,
-                msg = string.format("__FOL_SYNC__:%s|%d|%d", targetLower, tgtFolCount, myFolCount),
-                jobId = game.JobId,
-                hidden = true
-            }))
+        task.spawn(function()
+            if S.req then
+                pcall(function()
+                    S.req({
+                        Url = S.SERVER_URL .. "/send", Method = "POST",
+                        Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                        Body = Svc.Http:JSONEncode({
+                            user = lp.Name .. "::" .. lp.DisplayName,
+                            msg = string.format("__FOLLOW__:%s|%s", targetLower, stateBool and "1" or "0"),
+                            jobId = game.JobId,
+                            hidden = true
+                        })
+                    })
+                    S.req({
+                        Url = S.SERVER_URL .. "/send", Method = "POST",
+                        Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                        Body = Svc.Http:JSONEncode({
+                            user = lp.Name .. "::" .. lp.DisplayName,
+                            msg = string.format("__FOL_SYNC__:%s|%d|%d", targetLower, tgtFolCount, myFolCount),
+                            jobId = game.JobId,
+                            hidden = true
+                        })
+                    })
+                end)
+            end
         end)
     end
 
@@ -5351,6 +5357,12 @@ pcall(function()
     end
 end)
 
+-- 🧹 Old "sig" deletions used to hide EVERY future message with the same text (hi / . / hsy ...).
+-- They are re-created in order from the server history on load, so the stale ones are wiped here.
+pcall(function()
+    for k in pairs(S.deletedMsgSigs) do S.deletedMsgSigs[k] = nil end
+end)
+
 local function saveDeletedMsgsDB()
     pcall(function()
         S.writeF(S.DELETE_LOG_FILE, Svc.Http:JSONEncode({
@@ -5394,14 +5406,20 @@ local function applyGlobalMessageDelete(targetId, targetSig, broadcastToNet)
         S.cardWrapperBySig[targetSig] = nil
     end
 
-    if broadcastToNet then
-        pcall(function()
-            enqueueServerPost(Svc.Http:JSONEncode({
-                user = lp.Name .. "::" .. lp.DisplayName,
-                msg = string.format("__MSG_DEL__:%s|%s|%s", tostring(targetId or ""), tostring(targetSig or ""), tostring(lp.UserId)),
-                jobId = game.JobId,
-                hidden = true
-            }))
+    if broadcastToNet and S.req then
+        task.spawn(function()
+            pcall(function()
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({
+                        user = lp.Name .. "::" .. lp.DisplayName,
+                        msg = string.format("__MSG_DEL__:%s|%s|%s", tostring(targetId or ""), tostring(targetSig or ""), tostring(lp.UserId)),
+                        jobId = game.JobId,
+                        hidden = true
+                    })
+                })
+            end)
         end)
     end
 end
@@ -5455,7 +5473,8 @@ local function addJoinNotice(dispName, scopeType, customText)
     })
     crispText(lbl, 0.6)
 end
-     local function closeReactionMenu()
+
+local function closeReactionMenu()
     if S.activeReactionMenu then S.activeReactionMenu:Destroy(); S.activeReactionMenu = nil end
     if S.activeSelfMenu then S.activeSelfMenu:Destroy(); S.activeSelfMenu = nil end
     S.activeReactionDragState = nil
@@ -5470,37 +5489,30 @@ end
 
 local function broadcastReactionPacket(msgId, emojiStr, isRemoving)
     if not msgId or msgId == "" then return end
-    pcall(function()
-        enqueueServerPost(Svc.Http:JSONEncode({
-            user = lp.Name .. "::" .. lp.DisplayName,
-            msg = string.format("%s:%s|%s", isRemoving and "__UNREACT__" or "__REACT__", tostring(msgId), tostring(emojiStr)),
-            jobId = game.JobId,
-            hidden = true
-        }))
+    task.spawn(function()
+        if S.req then
+            pcall(function()
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({
+                        user = lp.Name .. "::" .. lp.DisplayName,
+                        msg = string.format("%s:%s|%s", isRemoving and "__UNREACT__" or "__REACT__", tostring(msgId), tostring(emojiStr)),
+                        jobId = game.JobId,
+                        hidden = true
+                    })
+                })
+            end)
+        end
     end)
-end
-
--- Invisible zero-width envelope helper so 1-char / short words like ".", "hi", "hsy" NEVER get rejected by backend spam filters
-local ZW_PAD = "\226\128\139" -- U+200B zero-width space (invisible in Roblox fonts)
-local function unwrapShortMsg(str)
-    if not str then return "" end
-    return (tostring(str):gsub(ZW_PAD, ""))
-end
-local function wrapShortMsgForTransport(str)
-    local clean = unwrapShortMsg(str)
-    if #clean > 0 and #clean <= 4 then
-        return clean .. ZW_PAD .. ZW_PAD
-    end
-    return clean
 end
 
 local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSender, msgJobId, scopeType, customTimeStr, explicitMsgId)
     local effectiveScope = privateUserTarget and "dm" or (scopeType or "global")
     local effectiveJob = tostring(msgJobId or game.JobId)
 
-    local unwrappedRawMsg = unwrapShortMsg(msg)
-    local replyToName, replySnippet, cleanBodyMsg = unwrappedRawMsg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
-    local displayMsg = unwrapShortMsg(cleanBodyMsg or unwrappedRawMsg)
+    local replyToName, replySnippet, cleanBodyMsg = msg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
+    local displayMsg = cleanBodyMsg or msg
     local memeIdMatch = displayMsg:match("%[MEME:(%d+)%]")
     local webMemeUrlMatch = displayMsg:match("%[WEBMEME:([^%]]+)%]")
     local isAnyMeme = (memeIdMatch ~= nil) or (webMemeUrlMatch ~= nil)
@@ -5582,16 +5594,16 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
     mk("Frame", card, { Size = UDim2.new(1, -24, 0, 1), Position = UDim2.new(0, 12, 0, 1), BackgroundColor3 = rgb(255, 255, 255), BackgroundTransparency = 0.88, BorderSizePixel = 0, ZIndex = 11 })
 
     local cardScale = mk("UIScale", card, { Scale = 0.96 })
-    Svc.Tween:Create(cardScale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+    Svc.Tween:Create(cardScale, TweenInfo.new(0.26, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
 
     card.MouseEnter:Connect(function()
         if not S.activeReactionMenu then
-            Svc.Tween:Create(cardScale, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1.012}):Play()
+            Svc.Tween:Create(cardScale, TweenInfo.new(0.20, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1.012}):Play()
         end
     end)
     card.MouseLeave:Connect(function()
         if not S.activeReactionMenu then
-            Svc.Tween:Create(cardScale, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1}):Play()
+            Svc.Tween:Create(cardScale, TweenInfo.new(0.20, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Scale = 1}):Play()
         end
     end)
 
@@ -5610,9 +5622,9 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         if targetBtn then
             local scObj = targetBtn:FindFirstChildOfClass("UIScale")
             if scObj then
-                Svc.Tween:Create(scObj, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
+                Svc.Tween:Create(scObj, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
             end
-            task.delay(0.19, function()
+            task.delay(0.21, function()
                 if targetBtn and targetBtn.Parent then targetBtn:Destroy() end
                 local hasReacts = false
                 for _, c in ipairs(reactionPillContainer:GetChildren()) do
@@ -5648,11 +5660,11 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         
         reactionPillContainer.Visible = true
         playSFX("reaction")
-        Svc.Tween:Create(rBtnScale, TweenInfo.new(0.26, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+        Svc.Tween:Create(rBtnScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
         
         local rpScale = reactionPillContainer:FindFirstChildOfClass("UIScale") or mk("UIScale", reactionPillContainer)
         rpScale.Scale = 0.4
-        Svc.Tween:Create(rpScale, TweenInfo.new(0.32, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
+        Svc.Tween:Create(rpScale, TweenInfo.new(0.4, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {Scale = 1}):Play()
 
         if not fromNetwork then
             broadcastReactionPacket(msgSyncKey, emojiStr, false)
@@ -5693,6 +5705,9 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         playSFX("broadcast")
     end
 
+    -- Dedicated Clipped Avatar & Frame Safe-Zone (keeps left border identical while vertically expanding card so frame never clips outside!)
+    local avZoneTop = hasAvatarFrame and 14 or 9
+    local avZoneLeft = hasAvatarFrame and 22 or 14
     local contentLeftOffset = hasAvatarFrame and 68 or 54
 
     local avatarSafeZone = mk("Frame", card, {
@@ -6088,20 +6103,6 @@ local function addMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSe
         if endConn then endConn:Disconnect() end
     end)
 
-    -- Memory-safe feed pruning: keep at most 160 rendered cards so long sessions never lag
-    pcall(function()
-        local children = UI.messageFeed:GetChildren()
-        if #children > 165 then
-            for idx = 1, #children do
-                local ch = children[idx]
-                if ch:IsA("Frame") and ch ~= cardWrapper then
-                    ch:Destroy()
-                    break
-                end
-            end
-        end
-    end)
-
     if cardWrapper.Visible then
         task.defer(function()
             local maxOffset = math.max(0, UI.messageFeed.AbsoluteCanvasSize.Y - UI.messageFeed.AbsoluteWindowSize.Y)
@@ -6300,13 +6301,15 @@ local function broadcastTypingSignal()
     if isLocalPlayerMuted() then return end
     if tick() - S.lastTypingBroadcast < 3.2 then return end
     S.lastTypingBroadcast = tick()
-    pcall(function()
-        enqueueServerPost(Svc.Http:JSONEncode({
-            user = lp.Name .. "::" .. lp.DisplayName,
-            msg = "__TYPING__",
-            jobId = game.JobId,
-            hidden = true
-        }))
+    task.spawn(function()
+        if S.req then
+            pcall(function()
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "__TYPING__", jobId = game.JobId, hidden = true })
+                })
+            end)
+        end
     end)
 end
 
@@ -6563,6 +6566,12 @@ do
                     TextTruncate = Enum.TextTruncate.AtEnd, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 264
                 })
 
+                pcall(function()
+                    cardHolder:SetAttribute("TXRMemeUrl", mData.url or "")
+                    cardHolder:SetAttribute("TXRMemeAsset", tostring(mData.assetId or ""))
+                    S.__memeRerender = renderCurrentMemePage
+                    if mData.assetId and S.__memeAssetCheck then S.__memeAssetCheck(mData, cardHolder) end
+                end)
                 if mData.url then
                     loadWebImageAsync(mData.url, cardHolder)
                 end
@@ -6819,12 +6828,12 @@ local function makeDraggable(frame, handlesList, ghostAura, isOrb)
                 dragLoop = Svc.Run.RenderStepped:Connect(function(dt)
                     if _G.TXR_ChatInstanceID ~= currentExecutionID then dragLoop:Disconnect(); return end
                     if dragging then
-                        frame.Position = frame.Position:Lerp(targetPos, math.clamp(dt * 32, 0, 1))
+                        frame.Position = frame.Position:Lerp(targetPos, math.clamp(dt * 28, 0, 1))
                     else
                         if velocity.Magnitude > 0.5 then
                             velocity = velocity * 0.88
                             targetPos = getClampedTarget(targetPos.X.Scale, targetPos.X.Offset + velocity.X, targetPos.Y.Scale, targetPos.Y.Offset + velocity.Y)
-                            frame.Position = frame.Position:Lerp(targetPos, math.clamp(dt * 18, 0, 1))
+                            frame.Position = frame.Position:Lerp(targetPos, math.clamp(dt * 16, 0, 1))
                         else
                             dragLoop:Disconnect(); dragLoop = nil
                         end
@@ -6901,7 +6910,7 @@ Svc.UIS.InputBegan:Connect(function(input, gp)
 end)
 
 -- =========================================================
--- ⚡ 60–144 FPS RENDER LOOP (ULTRA-SMOOTH & MEMORY SAFE)
+-- ⚡ 60 FPS RENDER LOOP (ULTRA-SMOOTH & MEMORY SAFE)
 -- =========================================================
 task.spawn(function()
     local t, sonarTimer, sparkTimer, currentSpeedMod, currentRadiusMod = 0, 0, 0, 1, 1
@@ -7277,6 +7286,333 @@ local function handleSmartAIQuery(rawQuery)
 end
 
 -- =========================================================
+-- 🤖 TXR MULTI-AGENT AI HUB (7 specialised agents on top of the original @ai engine)
+-- =========================================================
+pcall(function()
+    local AGENTS = {
+        ai   = { name = "AI",    tag = "General Assistant",   icon = "🤖", sys = "You are TXR ReChat AI, a smart, friendly gaming & chat assistant inside Roblox. Reply in the same language as the user (Hinglish or English), max 2-3 short sentences, no markdown." },
+        nova = { name = "NOVA",  tag = "Code & Scripting",    icon = "💻", sys = "You are NOVA, an expert Luau/Roblox and general programming assistant. Give the shortest correct answer or a tiny code snippet in plain text, max 3 short sentences, no markdown fences. Reply in the user's language." },
+        sage = { name = "SAGE",  tag = "Math & Study Tutor",  icon = "🧠", sys = "You are SAGE, a patient tutor for math, science and homework. Explain the answer step by step but very briefly (max 3 short sentences), plain text only. Reply in the user's language." },
+        lingo= { name = "LINGO", tag = "Translator",          icon = "🌐", sys = "You are LINGO, a precise translator. Output ONLY the translation, nothing else." },
+        muse = { name = "MUSE",  tag = "Creative Writer",     icon = "✨", sys = "You are MUSE, a witty creative writer: jokes, shayari, roasts (friendly), rap lines, captions, bios. Keep it under 3 short lines, plain text, match the user's language (Hinglish/English)." },
+        atlas= { name = "ATLAS", tag = "Live Research",       icon = "🔎", sys = "You are ATLAS, a factual research assistant. Answer concisely and accurately in max 3 short sentences, plain text. If unsure, say so. Reply in the user's language." },
+        pulse= { name = "PULSE", tag = "Utilities & Tools",   icon = "⚡", sys = "You are PULSE, a quick utility assistant. Reply in max 2 short sentences, plain text." },
+    }
+    S.__aiAgents = AGENTS
+    S.__aiAgentList = {
+        { key = "nova", tag = "Code & Scripting" }, { key = "sage", tag = "Math & Study" },
+        { key = "lingo", tag = "Translator" }, { key = "muse", tag = "Creative Writer" },
+        { key = "atlas", tag = "Live Research" }, { key = "pulse", tag = "Utilities" },
+    }
+    S.__aiMem = S.__aiMem or {}
+    local lastAsk = 0
+
+    local function cleanBody(b)
+        if type(b) ~= "string" then return nil end
+        b = b:gsub("^%s+", ""):gsub("%s+$", "")
+        if b == "" then return nil end
+        local l = b:sub(1, 400):lower()
+        if l:find("<!doctype", 1, true) or l:find("<html", 1, true) or l:find("just a moment", 1, true) or l:find("rate limit", 1, true) or l:find("\"error\"", 1, true) then return nil end
+        return b
+    end
+
+    local function trimTo(s, n)
+        if #s <= n then return s end
+        local cut = s:sub(1, n - 1)
+        local last = cut:match("^.*()[%.!%?]%s")
+        if last and last > n * 0.55 then return cut:sub(1, last) end
+        return cut .. "…"
+    end
+
+    local function askLLM(sys, userText, history)
+        if not S.req then return nil end
+        local seed = tostring(math.random(100000, 9999999))
+        local msgs = { { role = "system", content = sys } }
+        for _, h in ipairs(history or {}) do table.insert(msgs, h) end
+        table.insert(msgs, { role = "user", content = userText })
+        for _, model in ipairs({ "openai", "mistral", "llama" }) do
+            local ok, res = pcall(function()
+                return S.req({
+                    Url = "https://text.pollinations.ai/", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "TXR-Client/" .. seed },
+                    Body = Svc.Http:JSONEncode({ messages = msgs, model = model, seed = tonumber(seed), private = true })
+                })
+            end)
+            if ok and res and (res.StatusCode == 200 or res.Status == 200) then
+                local t = cleanBody(res.Body)
+                if t then return t end
+            end
+        end
+        local ok2, res2 = pcall(function()
+            return S.req({
+                Url = "https://text.pollinations.ai/" .. Svc.Http:UrlEncode(userText) .. "?model=mistral&seed=" .. seed .. "&system=" .. Svc.Http:UrlEncode(sys),
+                Method = "GET", Headers = { ["User-Agent"] = "Mozilla/5.0", ["Accept"] = "text/plain" }
+            })
+        end)
+        if ok2 and res2 and (res2.StatusCode == 200 or res2.Status == 200) then
+            local t = cleanBody(res2.Body)
+            if t then return t end
+        end
+        return nil
+    end
+
+    -- safe recursive-descent calculator (no loadstring)
+    local function safeCalc(expr)
+        local s = expr:gsub("×", "*"):gsub("÷", "/"):gsub(",", ""):gsub("%s+", "")
+        s = s:lower()
+        local pos = 1
+        local parseExpr
+        local function peek() return s:sub(pos, pos) end
+        local function atom()
+            local c = peek()
+            if c == "(" then
+                pos = pos + 1
+                local v = parseExpr()
+                if peek() ~= ")" then error("paren") end
+                pos = pos + 1
+                return v
+            end
+            local num = s:match("^%d+%.?%d*", pos) or s:match("^%.%d+", pos)
+            if num then pos = pos + #num; return tonumber(num) end
+            local name = s:match("^%a+", pos)
+            if name then
+                pos = pos + #name
+                if name == "pi" then return math.pi end
+                if name == "e" then return math.exp(1) end
+                if peek() ~= "(" then error("name") end
+                pos = pos + 1
+                local v = parseExpr()
+                if peek() ~= ")" then error("paren") end
+                pos = pos + 1
+                local fns = { sqrt = math.sqrt, abs = math.abs, sin = function(x) return math.sin(math.rad(x)) end, cos = function(x) return math.cos(math.rad(x)) end,
+                    tan = function(x) return math.tan(math.rad(x)) end, log = function(x) return math.log10(x) end, ln = function(x) return math.log(x) end,
+                    floor = math.floor, ceil = math.ceil, round = function(x) return math.floor(x + 0.5) end }
+                if not fns[name] then error("fn") end
+                return fns[name](v)
+            end
+            error("syntax")
+        end
+        local function unary()
+            local c = peek()
+            if c == "-" then pos = pos + 1; return -unary() end
+            if c == "+" then pos = pos + 1; return unary() end
+            return atom()
+        end
+        local function power()
+            local base = unary()
+            if peek() == "^" then pos = pos + 1; return base ^ power() end
+            return base
+        end
+        local function term()
+            local v = power()
+            while true do
+                local c = peek()
+                if c == "*" then pos = pos + 1; v = v * power()
+                elseif c == "/" then pos = pos + 1; v = v / power()
+                elseif c == "%" then pos = pos + 1; v = v % power()
+                else break end
+            end
+            return v
+        end
+        parseExpr = function()
+            local v = term()
+            while true do
+                local c = peek()
+                if c == "+" then pos = pos + 1; v = v + term()
+                elseif c == "-" then pos = pos + 1; v = v - term()
+                else break end
+            end
+            return v
+        end
+        local v = parseExpr()
+        if pos <= #s then error("trailing") end
+        return v
+    end
+
+    local function fmtNum(v)
+        if v ~= v or v == math.huge or v == -math.huge then return nil end
+        if math.abs(v - math.floor(v + 0.5)) < 1e-9 and math.abs(v) < 1e15 then return tostring(math.floor(v + 0.5)) end
+        return string.format("%.8g", v)
+    end
+
+    local function wikiFacts(q)
+        if not S.req then return nil end
+        local ok, res = pcall(function()
+            return S.req({ Url = "https://en.wikipedia.org/w/api.php?action=opensearch&limit=1&format=json&search=" .. Svc.Http:UrlEncode(q), Method = "GET", Headers = { ["User-Agent"] = "Mozilla/5.0" } })
+        end)
+        if not (ok and res and (res.StatusCode == 200 or res.Status == 200) and res.Body) then return nil end
+        local dOk, dec = pcall(function() return Svc.Http:JSONDecode(res.Body) end)
+        local title = dOk and type(dec) == "table" and type(dec[2]) == "table" and dec[2][1]
+        if not title then return nil end
+        local ok2, res2 = pcall(function()
+            return S.req({ Url = "https://en.wikipedia.org/api/rest_v1/page/summary/" .. Svc.Http:UrlEncode((title:gsub(" ", "_"))), Method = "GET", Headers = { ["User-Agent"] = "Mozilla/5.0" } })
+        end)
+        if not (ok2 and res2 and (res2.StatusCode == 200 or res2.Status == 200) and res2.Body) then return nil end
+        local d2Ok, dec2 = pcall(function() return Svc.Http:JSONDecode(res2.Body) end)
+        if d2Ok and type(dec2) == "table" and type(dec2.extract) == "string" and #dec2.extract > 20 then
+            return title, dec2.extract
+        end
+        return nil
+    end
+
+    local function say(key, text, scope)
+        local ag = AGENTS[key] or AGENTS.ai
+        S.remoteTypers[BRAND_TITLE] = nil
+        addMessageToFeed("System::" .. BRAND_TITLE, ag.icon .. " " .. ag.name .. "  ·  " .. text, nil, false, game.JobId, scope)
+    end
+
+    local function pulseTool(q, scope)
+        local low = q:lower()
+        local cmd, arg = low:match("^(%a+)%s*(.*)$")
+        cmd = cmd or low
+        arg = arg or ""
+        if cmd == "ping" or cmd == "telemetry" then
+            local pMs = 60
+            pcall(function() pMs = math.floor(lp:GetNetworkPing() * 1000) end)
+            return string.format("Network telemetry: %dms ping • %d players in server.", pMs, #Svc.Players:GetPlayers())
+        elseif cmd == "fps" then
+            local f = (_G.TXR_Governor and _G.TXR_Governor.fps) or 60
+            return string.format("Frame rate: %d FPS.", math.floor(f + 0.5))
+        elseif cmd == "roll" or cmd == "dice" then
+            local n = tonumber(arg) or 100
+            n = math.clamp(math.floor(n), 2, 1000000)
+            return string.format("%s rolled %d / %d.", lp.DisplayName, math.random(1, n), n)
+        elseif cmd == "flip" or cmd == "coin" then
+            return "Coin flip: " .. ((math.random(1, 2) == 1) and "HEADS" or "TAILS") .. "."
+        elseif cmd == "time" or cmd == "date" then
+            return os.date("It is %H:%M on %A, %d %B %Y (local time).")
+        elseif cmd == "pick" or cmd == "choose" then
+            local opts = {}
+            for part in arg:gmatch("[^,|]+") do
+                local t = part:gsub("^%s+", ""):gsub("%s+$", "")
+                if t ~= "" then table.insert(opts, t) end
+            end
+            if #opts < 2 then return "Give me at least two options, e.g. @pulse pick pizza, burger, momos" end
+            return "I pick: " .. opts[math.random(1, #opts)]
+        elseif cmd == "8ball" or cmd == "ball" then
+            local a = { "Absolutely yes.", "Without a doubt.", "Signs point to yes.", "Ask again later.", "Cannot predict now.", "Don't count on it.", "Very doubtful.", "My sources say no." }
+            return a[math.random(1, #a)]
+        elseif cmd == "pass" or cmd == "password" then
+            local n = math.clamp(math.floor(tonumber(arg) or 14), 8, 32)
+            local chars = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%"
+            local out = {}
+            for i = 1, n do local r = math.random(1, #chars); out[i] = chars:sub(r, r) end
+            return "Generated password: " .. table.concat(out) .. "  (only you can see this)"
+        elseif cmd == "rps" then
+            local a = { "Rock 🪨", "Paper 📄", "Scissors ✂️" }
+            return "I choose " .. a[math.random(1, 3)] .. "!"
+        elseif cmd == "players" or cmd == "who" then
+            local names = {}
+            for _, p in ipairs(Svc.Players:GetPlayers()) do table.insert(names, p.DisplayName) if #names >= 12 then break end end
+            return string.format("%d players here: %s", #Svc.Players:GetPlayers(), table.concat(names, ", "))
+        end
+        return nil
+    end
+
+    local function listAgents(scope)
+        local lines = { "Your AI team — type any handle followed by your request:" }
+        table.insert(lines, "@ai General • @nova Code • @sage Math/Study • @lingo Translate • @muse Creative • @atlas Research • @pulse Tools (ping, fps, roll, flip, time, pick, 8ball, pass, rps).")
+        S.remoteTypers[BRAND_TITLE] = nil
+        addMessageToFeed("System::" .. BRAND_TITLE, "🤖 AI HUB  ·  " .. table.concat(lines, "  "), nil, false, game.JobId, scope)
+    end
+
+    local function handle(rawQuery)
+        local scope = (S.chatMode == "rank" or S.chatMode == "extra") and "global" or S.chatMode
+        local key, rest = rawQuery:match("^[@/](%a+)%s*(.*)$")
+        if not key then key = "ai"; rest = rawQuery end
+        key = key:lower()
+        if key == "agents" or key == "agent" then listAgents(scope); return end
+        local agent = AGENTS[key]
+        if not agent then
+            key = "ai"
+            agent = AGENTS.ai
+            rest = (rawQuery:gsub("^[@/][aA][iI]%s*", ""))
+        end
+        rest = rest:gsub("^%s+", ""):gsub("%s+$", "")
+        if rest == "" then
+            if key == "ai" then
+                S.remoteTypers[BRAND_TITLE] = tick() + 1
+                task.delay(0.15, function() say("ai", "Ready when you are. Ask me anything, or type @agents to see every assistant.", scope) end)
+            else
+                task.delay(0.15, function() say(key, agent.tag .. " online. Example: @" .. key .. " " .. ((key == "lingo") and "hindi: good morning" or (key == "pulse") and "roll 20" or "your request"), scope) end)
+            end
+            return
+        end
+        if tick() - lastAsk < 0.9 then return end
+        lastAsk = tick()
+        local lowRest = rest:lower()
+        if lowRest == "agents" or lowRest == "help" or lowRest == "list" then listAgents(scope); return end
+
+        S.remoteTypers[BRAND_TITLE] = tick() + 14
+        task.spawn(function()
+            local okAll, errAll = pcall(function()
+                -- local instant tools first
+                local quickAI = { ping = true, telemetry = true, roll = true, dice = true, flip = true, coin = true, fps = true, time = true }
+                if key == "pulse" or (key == "ai" and quickAI[lowRest]) then
+                    local t = pulseTool(rest, scope)
+                    if t then task.wait(0.2); say(key == "ai" and "pulse" or key, t, scope); return end
+                end
+                if key == "sage" or key == "pulse" or key == "ai" then
+                    local ex = lowRest:match("^calc%s+(.+)$") or lowRest:match("^math%s+(.+)$")
+                    if not ex and lowRest:match("^[%d%s%+%-%*/%^%%%(%)%.,×÷]+$") and lowRest:match("%d") and lowRest:match("[%+%-%*/%^%%×÷]") then ex = lowRest end
+                    if ex then
+                        local okC, val = pcall(safeCalc, ex)
+                        local f = okC and fmtNum(val)
+                        if f then task.wait(0.15); say(key == "ai" and "sage" or key, ex:gsub("%s+", "") .. " = " .. f, scope); return end
+                    end
+                end
+                local sys = agent.sys
+                local prompt = rest
+                if key == "lingo" then
+                    local lang, txt = rest:match("^to%s+(%a+)%s*[:>%-]*%s*(.+)$")
+                    if not lang then lang, txt = rest:match("^(%a+)%s*[:>]%s*(.+)$") end
+                    if lang and txt then
+                        prompt = "Translate to " .. lang .. ": " .. txt
+                    else
+                        prompt = "Translate this. If it is English translate to Hindi (Devanagari + Hinglish in brackets), otherwise translate to English: " .. rest
+                    end
+                elseif key == "atlas" then
+                    local title, facts = wikiFacts(rest)
+                    if facts then
+                        prompt = "Using these verified facts, answer the question concisely.\nFacts about " .. title .. ": " .. facts:sub(1, 900) .. "\nQuestion: " .. rest
+                    end
+                end
+                local mem = S.__aiMem[key]
+                if not mem then mem = {}; S.__aiMem[key] = mem end
+                local reply = askLLM(sys, prompt, mem)
+                if not reply and key == "atlas" then
+                    local _, facts = wikiFacts(rest)
+                    reply = facts
+                end
+                if not reply then
+                    local pool = {
+                        "Network thoda busy hai bro — dobara try kar, main yahin hoon.",
+                        "Servers par load hai, ek chhota sawal phir se bhej do.",
+                        "Connection slow hai, 5 second baad try karo. Meanwhile @pulse tools kaam karte hain."
+                    }
+                    reply = pool[math.random(1, #pool)]
+                end
+                reply = trimTo(reply, (key == "atlas" or key == "nova") and 460 or 380)
+                table.insert(mem, { role = "user", content = prompt:sub(1, 300) })
+                table.insert(mem, { role = "assistant", content = reply:sub(1, 300) })
+                while #mem > 6 do table.remove(mem, 1) end
+                say(key, reply, scope)
+            end)
+            if not okAll then
+                S.remoteTypers[BRAND_TITLE] = nil
+                warn("[TXR AI Hub] " .. tostring(errAll))
+            end
+        end)
+    end
+    S.__aiHandle = handle
+
+    handleSmartAIQuery = function(rawQuery)
+        local okH, errH = pcall(handle, rawQuery)
+        if not okH then warn("[TXR AI Hub] " .. tostring(errH)) end
+    end
+end)
+
+-- =========================================================
 -- 📡 SEND MESSAGE + OWNER MUTE/UNMUTE COMMANDS
 -- =========================================================
 local RenderedCardKeys = {}
@@ -7292,7 +7628,7 @@ pcall(function()
     S.EchoGuard = EG
 
     local function norm(s)
-        s = unwrapShortMsg(tostring(s or ""))
+        s = tostring(s or "")
         s = s:gsub("%s+", " ")
         s = s:gsub("^ ", "")
         s = s:gsub(" $", "")
@@ -7340,7 +7676,7 @@ pcall(function()
             if p.user == uName and p.msg == msgN then
                 table.remove(EG.pending, i)
                 EG.recent[key] = now
-                local sig = tostring(m.user) .. "::" .. unwrapShortMsg(tostring(m.msg))
+                local sig = tostring(m.user) .. "::" .. tostring(m.msg)
                 local c = S.recentLocalSentMap[sig]
                 if c then S.recentLocalSentMap[sig] = (c > 1) and (c - 1) or nil end
                 return true
@@ -7348,7 +7684,7 @@ pcall(function()
         end
 
         local lastT = EG.recent[key]
-        if lastT and (now - lastT) < 6 then
+        if lastT and (now - lastT) < 25 then
             warn("[TXR EchoGuard] duplicate copy of my own message blocked (re-delivery)")
             return true
         end
@@ -7367,12 +7703,14 @@ pcall(function()
         return false
     end
 
+    -- On a fresh load the saved local history (disk cache) and the server history both
+    -- contain my old messages under different keys -> the same message used to render twice.
     function EG.matchCache(m)
         if type(m) ~= "table" or tostring(m.msg or ""):sub(1, 5) ~= "[GLB]" then return false end
         local cache = _G.TXR_GlobalHistoryCache
         if type(cache) ~= "table" then return false end
         local uName = nameOf(m.user)
-        local bodyN = norm((unwrapShortMsg(tostring(m.msg)):gsub("^%[GLB%]%s*", "")))
+        local bodyN = norm((tostring(m.msg):gsub("^%[GLB%]%s*", "")))
         for _, item in ipairs(cache) do
             if type(item) == "table" and not item.__txMatched and nameOf(item.user) == uName and norm(item.msg) == bodyN then
                 item.__txMatched = true
@@ -7395,8 +7733,7 @@ S.sendMessageFunc = function(overrideText)
     if text == "TextBox" then text = "" end
     text = text:gsub("^%s+", ""):gsub("%s+$", "")
     
-    -- Allow instant send for ".", "Hi", "hi", "hsy", or any 1-char message with zero lockouts
-    if text == "" or (tick() - S.lastSendTick < 0.04) then return end
+    if text == "" or (tick() - S.lastSendTick < 0.15) then return end
     S.lastSendTick = tick()
     UI.autoCompleteBar.Visible = false
 
@@ -7462,14 +7799,10 @@ S.sendMessageFunc = function(overrideText)
         clearReplyBanner()
     end
 
-    -- Transport-safe envelope so 1-2 char words (".", "hi", "hsy") bypass server minimum-length filters
-    local transportBody = wrapShortMsgForTransport(payloadBodyText)
-    local finalMsg = transportBody
-    local cleanFinalMsgForLocal = payloadBodyText
+    local finalMsg = payloadBodyText
 
     if S.privateTarget then
-        finalMsg = "( 🔐 " .. lp.Name .. " Private " .. S.privateTarget .. ") " .. transportBody
-        cleanFinalMsgForLocal = "( 🔐 " .. lp.Name .. " Private " .. S.privateTarget .. ") " .. payloadBodyText
+        finalMsg = "( 🔐 " .. lp.Name .. " Private " .. S.privateTarget .. ") " .. payloadBodyText
         currentScope = "dm"
         if S.chatMode ~= "dm" then switchChatTab("dm") end
     else
@@ -7477,8 +7810,7 @@ S.sendMessageFunc = function(overrideText)
             addMessageToFeed("System::" .. BRAND_TITLE, "Select a player first via Profile -> DM or type '!p <username>'.", nil, false, game.JobId, "dm")
             return
         end
-        finalMsg = (currentScope == "server") and ("[SRV:" .. tostring(game.JobId) .. "] " .. transportBody) or ("[GLB] " .. transportBody)
-        cleanFinalMsgForLocal = (currentScope == "server") and ("[SRV:" .. tostring(game.JobId) .. "] " .. payloadBodyText) or ("[GLB] " .. payloadBodyText)
+        finalMsg = (currentScope == "server") and ("[SRV:" .. tostring(game.JobId) .. "] " .. payloadBodyText) or ("[GLB] " .. payloadBodyText)
     end
 
     if not overrideText then UI.chatInput.Text = "" end
@@ -7499,12 +7831,21 @@ S.sendMessageFunc = function(overrideText)
         handleSmartAIQuery(text)
     end
 
-    local localEchoSig = encodedUserTag .. "::" .. cleanFinalMsgForLocal
+    local localEchoSig = encodedUserTag .. "::" .. finalMsg
     S.recentLocalSentMap[localEchoSig] = (S.recentLocalSentMap[localEchoSig] or 0) + 1
-    if S.EchoGuard then pcall(S.EchoGuard.register, encodedUserTag, cleanFinalMsgForLocal) end
+    if S.EchoGuard then pcall(S.EchoGuard.register, encodedUserTag, finalMsg) end
 
-    pcall(function()
-        enqueueServerPost(Svc.Http:JSONEncode({ user = encodedUserTag, msg = finalMsg, jobId = game.JobId }))
+    task.spawn(function()
+        if S.req then
+            local payload = Svc.Http:JSONEncode({ user = encodedUserTag, msg = finalMsg, jobId = game.JobId })
+            pcall(function()
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = payload
+                })
+            end)
+        end
     end)
 end
 
@@ -7840,13 +8181,15 @@ local function TXR_TagEngineInit()
     end
 
     local function sendHidden(msg)
-        pcall(function()
-            enqueueServerPost(Svc.Http:JSONEncode({
-                user = lp.Name .. "::" .. lp.DisplayName,
-                msg = msg,
-                jobId = game.JobId,
-                hidden = true
-            }))
+        task.spawn(function()
+            if not S.req then return end
+            pcall(function()
+                S.req({
+                    Url = S.SERVER_URL .. "/send", Method = "POST",
+                    Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = msg, jobId = game.JobId, hidden = true })
+                })
+            end)
         end)
     end
 
@@ -8156,6 +8499,11 @@ local function TXR_TagEngineInit()
         return ring, st, gr
     end
 
+    -- =====================================================
+    -- 🛡️ PFP OCCLUSION GUARD ENGINE:
+    -- Ensures ALL background glows & back-aura layers sit STRICTLY BEHIND the PFP photo (zBehind < avatarZ < zFront),
+    -- so the user's PFP face/image is 100% crystal clear with ZERO colored tint covering it!
+    -- =====================================================
     local function createScaledFrameInstance(parentContainer, item, avatarPx, zBehind, zFront, maxRadiusLimit)
         local sRatio = avatarPx / 74
         local rawBoxPx = math.floor(138 * sRatio)
@@ -8592,6 +8940,10 @@ local function TXR_TagEngineInit()
         return st
     end
 
+    -- =====================================================
+    -- 🛡️ PFP OCCLUSION GUARD ATTACHMENT HELPER
+    -- Places Back Glow strictly BELOW avatarImgObj.ZIndex, and Front Ring strictly ABOVE avatarImgObj.ZIndex!
+    -- =====================================================
     S.attachAvatarFrame = function(avatarImgObj, userLower, avatarPx, zBase)
         if not avatarImgObj or not avatarImgObj.Parent then return end
         local parentHost = avatarImgObj.Parent
@@ -8615,6 +8967,7 @@ local function TXR_TagEngineInit()
         local zBehind = avZ - 2
         local zFront = avZ + 1
 
+        -- Ensure parent bezel does not clip outer glow rings while AvatarSafeZone keeps card bounds clean
         if parentHost:IsA("GuiObject") and parentHost.Name ~= "AvatarSafeZone" then
             parentHost.ClipsDescendants = false
         end
@@ -8782,6 +9135,11 @@ local function TXR_TagEngineInit()
         profileFrameFrontRoot = nil
     end
 
+    -- =====================================================
+    -- 🛡️ PROFILE MODAL PFP OCCLUSION GUARD:
+    -- Avatar Bezel & Photo sit at ZIndex 307-309.
+    -- Back Glow sits at ZIndex 306 (BEHIND pAvatar), Front Ring sits at ZIndex 335 (IN FRONT OF pAvatar)!
+    -- =====================================================
     S.__txFrameKey = nil
     S.__txApplyFrame = function(lowU)
         lowU = lowU or (S.activeProfileUser and S.activeProfileUser:lower())
@@ -8835,6 +9193,9 @@ local function TXR_TagEngineInit()
         pcall(syncAllLiveAvatarFrames)
     end
 
+    -- =====================================================
+    -- ⚡ UNIFIED 60-FPS ANIMATION LOOP FOR ALL ACTIVE AVATAR FRAMES (PROFILE + CHAT + RANK + LIVE PREVIEW)
+    -- =====================================================
     do
         local frT = 0
         local frConn
@@ -9201,7 +9562,11 @@ local function TXR_TagEngineInit()
         end
     end
 
+    -- =====================================================
+    -- 🖼️ PLAYER COSMETIC WARDROBE MODAL (LIVE PFP FRAME PREVIEW + GLOW SELECTOR)
+    -- =====================================================
     local cosTab = "FRAMES"
+    local cosPreviewIdx = 1
     local cosPreviewBack = nil
     local cosPreviewFront = nil
 
@@ -9243,6 +9608,7 @@ local function TXR_TagEngineInit()
     })
     applySpringHover(csmFramesTabBtn); applySpringHover(csmGlowsTabBtn)
 
+    -- Live 60-FPS Interactive PFP Frame Preview Box
     local csmPreviewCard = mk("Frame", UI.cosmeticSelectorModal, {
         Size = UDim2.new(1, -24, 0, 96), Position = UDim2.fromOffset(12, 62),
         BackgroundColor3 = rgb(14, 19, 30), ClipsDescendants = true, ZIndex = 83,
@@ -9534,6 +9900,9 @@ local function TXR_TagEngineInit()
     UI.myGlowsDrawerBtn.TextColor3 = rgb(200, 140, 255)
     UI.myGlowsDrawerBtn.Visible = false
 
+    -- =====================================================
+    -- 🏷️ REBUILT "LIVE TAGS" MODAL (with gifted tags + countdowns)
+    -- =====================================================
     S.rebuildBadgeModalItems = function()
         pcall(function()
             for _, ch in ipairs(bsScroll:GetChildren()) do
@@ -9660,6 +10029,9 @@ local function TXR_TagEngineInit()
         end)
     end
 
+    -- =====================================================
+    -- 👑 OWNER TAG ENGINE MODAL (TARGET + TAGS + TIMER + GLOW + 20 60-FPS FRAMES)
+    -- =====================================================
     local engineTarget = lp.Name
     local engineTab = "GIRLS"
     local engineSel = nil
@@ -10173,6 +10545,9 @@ local function TXR_TagEngineInit()
     UI.tagEngineDrawerBtn.TextColor3 = GOLD
     UI.tagEngineDrawerBtn.Visible = isVerifiedOwner(myLowName, lp.UserId)
 
+    -- =====================================================
+    -- ✨ PREMIUM PROFILE GLOW (10 TYPES) + OWNER BUTTONS IN PROFILE
+    -- =====================================================
     UI.pmGlowAura = mk("ImageLabel", UI.mainFrame, {
         Size = UDim2.fromOffset(432, 452), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
         BackgroundTransparency = 1, Image = "rbxassetid://1316045217", ImageColor3 = rgb(255, 200, 60),
@@ -10281,6 +10656,9 @@ local function TXR_TagEngineInit()
         pcall(S.__txApplyGlowForOpenProfile)
     end
 
+    -- =====================================================
+    -- ⚡ RENDER LOOP: badge FX + glow animation + sparkles
+    -- =====================================================
     local fxT, sparkAcc = 0, 0
     local fxConn
     fxConn = Svc.Run.RenderStepped:Connect(function(dt)
@@ -10372,6 +10750,9 @@ local function TXR_TagEngineInit()
         end
     end)
 
+    -- =====================================================
+    -- ⏱ 1-SECOND TICKER: countdown labels + auto-expiry for tags, glows & frames
+    -- =====================================================
     task.spawn(function()
         while _G.TXR_ChatInstanceID == currentExecutionID and UI.gui and UI.gui.Parent do
             task.wait(1)
@@ -10500,9 +10881,7 @@ end
 
 
 task.spawn(function()
-    local failStreak = 0
     while _G.TXR_IsPolling and (_G.TXR_ChatInstanceID == currentExecutionID) and UI.gui and UI.gui.Parent do
-        local pollDelay = 0.45
         if S.req then
             local querySince = S.isInitialSync and 0 or math.max(0, math.floor(S.lastSyncTime) - 2)
             local success, res = pcall(function()
@@ -10511,17 +10890,26 @@ task.spawn(function()
                     Method = "GET", Headers = { ["User-Agent"] = "Roblox/WinInet" }
                 })
             end)
+            if success and res and (res.StatusCode == 200 or res.Status == 200) then
+                S.__txPollFails = 0
+            else
+                S.__txPollFails = (S.__txPollFails or 0) + 1
+            end
 
-            if success and res and (res.StatusCode == 200 or res.Status == 200) and res.Body then
+            if success and res and (res.StatusCode == 200 or res.Status == 200) then
                 local decodeSuccess, data = pcall(function() return Svc.Http:JSONDecode(res.Body) end)
 
                 if decodeSuccess and type(data) == "table" then
-                    failStreak = 0
                     local wasInitial = S.isInitialSync
                     S.isInitialSync = false
 
+                    local txBatchOk, txBatchErr = pcall(function()
                     for idx, m in ipairs(data) do
-                        if idx % 35 == 0 then task.wait() end
+                        if type(m) == "table" then
+                            local txKey = tostring(m.id or (tostring(m.time) .. "|" .. tostring(m.user) .. "|" .. tostring(m.msg)))
+                            if S.__txPoison and S.__txPoison[txKey] then continue end
+                            S.__txCurKey = txKey
+                        end
                         if m and m.msg and m.user then
                             local mTime = tonumber(m.time) or 0
                             if mTime > S.lastSyncTime then S.lastSyncTime = mTime end
@@ -10685,22 +11073,22 @@ task.spawn(function()
 
                             if m.hidden then continue end
 
-                            local cleanIncomingRawMsg = unwrapShortMsg(m.msg)
-                            local uniqueMsgKey = (m.id and tostring(m.id)) or (tostring(mTime) .. "_" .. tostring(m.user) .. "_" .. cleanIncomingRawMsg)
+                            local uniqueMsgKey = (m.id and tostring(m.id)) or (tostring(mTime) .. "_" .. tostring(m.user) .. "_" .. tostring(m.msg))
                             if RenderedCardKeys[uniqueMsgKey] then continue end
                             RenderedCardKeys[uniqueMsgKey] = true
 
                             S.remoteTypers[rawDispOnly] = nil
 
+                            S.__txFreshUser = actorLow
+                            S.__txFreshAt = os.clock()
                             if actorLow == lp.Name:lower() and S.EchoGuard then
-                                local cleanM = { user = m.user, msg = cleanIncomingRawMsg, id = m.id, time = m.time }
-                                if S.EchoGuard.shouldDrop(cleanM) or (wasInitial and S.EchoGuard.matchCache(cleanM)) then
+                                if S.EchoGuard.shouldDrop(m) or (wasInitial and S.EchoGuard.matchCache(m)) then
                                     continue
                                 end
                             end
 
                             if actorLow == lp.Name:lower() then
-                                local localEchoSig = tostring(m.user) .. "::" .. cleanIncomingRawMsg
+                                local localEchoSig = tostring(m.user) .. "::" .. tostring(m.msg)
                                 local pendingCount = S.recentLocalSentMap[localEchoSig] or 0
                                 if pendingCount > 0 then
                                     S.recentLocalSentMap[localEchoSig] = (pendingCount > 1) and (pendingCount - 1) or nil
@@ -10708,20 +11096,19 @@ task.spawn(function()
                                 end
                             end
 
-                            local srvJob, cleanSrvMsg = cleanIncomingRawMsg:match("^%[SRV:(.-)%]%s*(.*)$")
-                            local cleanGlbMsg = cleanIncomingRawMsg:match("^%[GLB%]%s*(.*)$")
-                            local scope, effectiveMsg = "global", cleanIncomingRawMsg
+                            local srvJob, cleanSrvMsg = m.msg:match("^%[SRV:(.-)%]%s*(.*)$")
+                            local cleanGlbMsg = m.msg:match("^%[GLB%]%s*(.*)$")
+                            local scope, effectiveMsg = "global", m.msg
 
                             if srvJob then
-                                scope, effectiveMsg = "server", unwrapShortMsg(cleanSrvMsg)
+                                scope, effectiveMsg = "server", cleanSrvMsg
                                 if tostring(srvJob) ~= tostring(game.JobId) then continue end
                             elseif cleanGlbMsg then
-                                scope, effectiveMsg = "global", unwrapShortMsg(cleanGlbMsg)
+                                scope, effectiveMsg = "global", cleanGlbMsg
                             end
 
                             local pSender, pTarget, pMsg = string.match(effectiveMsg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
                             if pSender and pTarget then
-                                pMsg = unwrapShortMsg(pMsg)
                                 if lp.Name == pSender then
                                     addMessageToFeed(m.user, pMsg, pTarget, true, m.jobId, "dm", nil, uniqueMsgKey)
                                 elseif lp.Name == pTarget then
@@ -10756,6 +11143,13 @@ task.spawn(function()
                             end
                         end
                     end
+                    end)
+                    if not txBatchOk then
+                        S.__txPoison = S.__txPoison or {}
+                        if S.__txCurKey then S.__txPoison[S.__txCurKey] = true end
+                        if wasInitial then S.isInitialSync = true end
+                        warn("[TXR PollGuard] one message was skipped after an error: " .. tostring(txBatchErr))
+                    end
 
                     if wasInitial then
                         saveGlobalProfilesDB()
@@ -10764,26 +11158,70 @@ task.spawn(function()
                         if S.refreshCurrentOpenProfile then S.refreshCurrentOpenProfile() end
                         scrollToFeedBottom()
                     end
-                else
-                    failStreak = math.min(failStreak + 1, 6)
-                    pollDelay = 0.45 + (failStreak * 0.35)
                 end
-            else
-                failStreak = math.min(failStreak + 1, 6)
-                pollDelay = 0.45 + (failStreak * 0.35)
             end
         end
-        task.wait(pollDelay)
+        if (S.__txPollFails or 0) > 2 then
+            task.wait(math.min((S.__txPollFails - 2) * 0.75, 6))
+        end
+        task.wait(math.random() * 0.12)
+        task.wait(0.45)
     end
 end)
+
+-- =========================================================
+-- ⚡ TXR BOOT-FAST ENGINE (instant join notice + instant professional welcome, no late duplicates)
+-- =========================================================
+do
+    S.__txBootShown = true
+    pcall(function()
+        SessionJoinShown[lp.Name:lower()] = true
+        addJoinNotice(lp.DisplayName, "server", sc("joined the server"))
+        addMessageToFeed("System::" .. BRAND_TITLE,
+            "Welcome, " .. tostring(lp.DisplayName) .. ". TXR Neural Hub is online: AI agents, secure DMs, Group Chats and Meme Studio are ready. Type @agents to meet your AI assistants.",
+            nil, false, game.JobId, "server")
+        if #_G.TXR_GlobalHistoryCache == 0 then
+            addMessageToFeed("System::" .. BRAND_TITLE, "Global network connected. Permanent chat storage is active.", nil, false, game.JobId, "global")
+        end
+        scrollToFeedBottom()
+    end)
+    local txOrigAddMsgBoot = addMessageToFeed
+    addMessageToFeed = function(rawUserName, msg, ...)
+        if S.__txBootShown and type(msg) == "string" and rawUserName == ("System::" .. BRAND_TITLE) then
+            if msg:find("V39.6 online!", 1, true) or msg:find("Global Network Synchronized!", 1, true) then
+                return
+            end
+        end
+        return txOrigAddMsgBoot(rawUserName, msg, ...)
+    end
+    local txOrigJoinBoot = addJoinNotice
+    local txSelfJoinSkipped = false
+    addJoinNotice = function(dispName, ...)
+        if not txSelfJoinSkipped and S.__txBootShown and dispName == lp.DisplayName then
+            txSelfJoinSkipped = true
+            return
+        end
+        return txOrigJoinBoot(dispName, ...)
+    end
+end
 
 -- Handshake + Broadcast Initial Saved Profile Theme/Bio/Mood/CustomMedia/Followers Globally
 task.spawn(function()
     local myJoinNonce = tostring(math.floor(currentExecutionID * 1000))
-    pcall(function()
-        enqueueServerPost(Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "Joined:" .. myJoinNonce, jobId = game.JobId, hidden = false }))
-        enqueueServerPost(Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "__REQ_SYNC__", jobId = game.JobId, hidden = true }))
-    end)
+    if S.req then
+        pcall(function()
+            S.req({
+                Url = S.SERVER_URL .. "/send", Method = "POST",
+                Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "Joined:" .. myJoinNonce, jobId = game.JobId, hidden = false })
+            })
+            S.req({
+                Url = S.SERVER_URL .. "/send", Method = "POST",
+                Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "__REQ_SYNC__", jobId = game.JobId, hidden = true })
+            })
+        end)
+    end
     broadcastMyProfileStyle()
     saveGlobalProfilesDB()
     SessionJoinShown[lp.Name:lower()] = true
@@ -10861,13 +11299,21 @@ do
     local function broadcastDmBlockPacket(targetUser, isBlocked)
         local tLow = tostring(targetUser or ""):lower()
         if tLow == "" or tLow == myLow then return end
-        pcall(function()
-            enqueueServerPost(Svc.Http:JSONEncode({
-                user = lp.Name .. "::" .. lp.DisplayName,
-                msg = string.format("__DM_BLOCK__:%s|%s", tLow, isBlocked and "1" or "0"),
-                jobId = game.JobId,
-                hidden = true
-            }))
+        task.spawn(function()
+            if S.req then
+                pcall(function()
+                    S.req({
+                        Url = S.SERVER_URL .. "/send", Method = "POST",
+                        Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                        Body = Svc.Http:JSONEncode({
+                            user = lp.Name .. "::" .. lp.DisplayName,
+                            msg = string.format("__DM_BLOCK__:%s|%s", tLow, isBlocked and "1" or "0"),
+                            jobId = game.JobId,
+                            hidden = true
+                        })
+                    })
+                end)
+            end
         end)
     end
 
@@ -11205,7 +11651,7 @@ do
                 TextSize = 11.2, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 18
             })
 
-            local previewTxt = unwrapShortMsg(tostring(conv.lastMsg or ""))
+            local previewTxt = tostring(conv.lastMsg or "")
             if previewTxt:find("%[MEME:") or previewTxt:find("%[WEBMEME:") then previewTxt = "🖼️ [Sent a GIF / Meme]" end
             previewTxt = previewTxt:gsub("^%[REP:[^%]]+%]%s*", "")
             if previewTxt == "" then previewTxt = sc("Tap to start chatting...") end
@@ -11456,8 +11902,6 @@ do
         local conv = ensureConversationRecord(partnerUser, partnerDisp)
         if not conv then return end
 
-        bodyText = unwrapShortMsg(bodyText)
-
         for _, existing in ipairs(conv.messages) do
             if existing.id == msgId then return end
         end
@@ -11584,10 +12028,8 @@ do
                                         refreshDmHeaderControls()
                                     end
 
-                                    local cleanDmRaw = unwrapShortMsg(m.msg)
-                                    local pSender, pTarget, pMsg = string.match(cleanDmRaw, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
+                                    local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
                                     if pSender and pTarget then
-                                        pMsg = unwrapShortMsg(pMsg)
                                         if pTarget:lower() == myLow then
                                             if S.blockedDmUsers[pSender:lower()] then
                                                 m.hidden = true
@@ -11618,6 +12060,11 @@ do
         end
     end
 
+    -- =====================================================
+    -- 🧭 TXR DM VIEW ENGINE (single source of truth for inbox / room / tab visibility)
+    -- Fixes: old flat private feed showing on the DMs tab, and the inbox / DM header
+    -- staying glued on top of Server / Global / Rank tabs.
+    -- =====================================================
     pcall(function()
         local function layoutRoom()
             UI.messageFeed.Position = UDim2.new(0, 12, 0, 126)
@@ -11675,6 +12122,13 @@ do
         end)
     end)
 
+    -- =====================================================
+    -- 📥 TXR DM HISTORY REPLAY ENGINE
+    -- The very first /messages?since=0 poll is fired BEFORE the DM hook exists, so every
+    -- DM stored on the server (sent while I was offline / before I loaded the script) was
+    -- never recorded -> empty inbox. This engine re-reads the history once through the
+    -- DM recorder (silent: no sfx / toast spam) and retries if the server is cold-starting.
+    -- =====================================================
     pcall(function()
         local function validEpoch(v)
             v = tonumber(v)
@@ -11707,10 +12161,8 @@ do
                             if blkState == "1" then S.blockedByUsers[senderLow] = true else S.blockedByUsers[senderLow] = nil end
                         end
 
-                        local cleanDmRaw = unwrapShortMsg(m.msg)
-                        local pSender, pTarget, pMsg = string.match(cleanDmRaw, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
+                        local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
                         if pSender and pTarget then
-                            pMsg = unwrapShortMsg(pMsg)
                             local mt = validEpoch(m.time)
                             local tStr = mt and os.date("%H:%M", mt) or os.date("%H:%M")
                             local partnerLow
@@ -11753,6 +12205,12 @@ do
         end)
     end)
 
+    -- =====================================================
+    -- 🪟 TXR PROFILE OVERLAY GUARD
+    -- TAG / GLOW / BLOCK sit above the profile at a very high ZIndex, so they were drawn on
+    -- top of the Followers / Following list and the media studio. They are now hidden while
+    -- any profile sub-panel is open and restored exactly as they were when it closes.
+    -- =====================================================
     pcall(function()
         local overlays, bound = {}, {}
         local savedVis, hiddenNow = {}, false
@@ -11824,44 +12282,146 @@ do
 end
 
 -- =========================================================
--- 🧱 TXR LAST-LINE DUPLICATE GUARDS (card level + request level)
+-- 🧱 TXR LAST-LINE ENGINES (installed last so they wrap the final functions)
+--   1. Delete-Signature Fix  : a deleted "hi" / "." can never hide future messages again
+--   2. Card Guard            : own message can never render twice
+--   3. Render Budget Queue   : message bursts are drawn a few per frame (zero hitch)
+--   4. Feed Trim Engine      : old cards are recycled so many chatters never cause lag
+--   5. Send Guard            : accidental double POST of the same chat line
 -- =========================================================
 pcall(function()
-    local G = { localN = {}, localT = {} , dropT = {} }
+    local G = { localN = {}, localT = {}, dropT = {} }
     S.CardGuard = G
+    S.__txSigDelFresh = S.__txSigDelFresh or {}
+    local Gov = _G.TXR_Governor
+
+    -- 1) Delete-signature fix -------------------------------------------------
+    local origApplyGlobalMessageDelete = applyGlobalMessageDelete
+    applyGlobalMessageDelete = function(targetId, targetSig, broadcastToNet)
+        if targetSig and targetSig ~= "" then S.__txSigDelFresh[targetSig] = true end
+        return origApplyGlobalMessageDelete(targetId, targetSig, broadcastToNet)
+    end
+
+    -- 3) Render budget queue --------------------------------------------------
+    local Q, qHead, qTail = {}, 1, 0
+    local budgetUsed, burstCount, burstNearBottom = 0, 0, true
     local origAddMessageToFeed = addMessageToFeed
+
+    local function budgetNow()
+        local fps = (_G.TXR_Governor and _G.TXR_Governor.fps) or 60
+        if fps >= 55 then return 8 end
+        if fps >= 40 then return 5 end
+        if fps >= 28 then return 3 end
+        return 2
+    end
+
+    Svc.Run.Heartbeat:Connect(function()
+        budgetUsed = 0
+        if qHead > qTail then return end
+        for _ = 1, budgetNow() do
+            if qHead > qTail then break end
+            local item = Q[qHead]
+            Q[qHead] = nil
+            qHead = qHead + 1
+            pcall(origAddMessageToFeed, item[1], item[2], item[3], item[4], item[5], item[6], item[7], item[8])
+        end
+        if qHead > qTail then
+            Q, qHead, qTail = {}, 1, 0
+            if burstCount >= 10 and burstNearBottom then pcall(scrollToFeedBottom) end
+            burstCount = 0
+        end
+    end)
+
+    -- 2) Card guard + wrapper -------------------------------------------------
     local myLowName = lp.Name:lower()
     local localPrefix = lp.Name .. "::" .. lp.DisplayName .. "_"
 
     addMessageToFeed = function(rawUserName, msg, privateUserTarget, isPrivateSender, msgJobId, scopeType, customTimeStr, explicitMsgId)
-        if not privateUserTarget and type(rawUserName) == "string" and type(msg) == "string" then
+        if type(rawUserName) == "string" and type(msg) == "string" then
             local who = (rawUserName:match("^(.-)::") or rawUserName):lower()
-            local scopeKey = scopeType or "global"
-            local cleanCardMsg = unwrapShortMsg(msg)
-            if who == myLowName and (scopeKey == "global" or scopeKey == "server") then
-                local now = os.clock()
-                local sig = scopeKey .. "|" .. cleanCardMsg
-                local isLocalCard = type(explicitMsgId) == "string" and explicitMsgId:sub(1, #localPrefix) == localPrefix
-                if isLocalCard then
-                    G.localN[sig] = (G.localN[sig] or 0) + 1
-                    G.localT[sig] = now
-                else
-                    if (G.localN[sig] or 0) > 0 and (now - (G.localT[sig] or 0)) < 90 then
-                        G.localN[sig] = G.localN[sig] - 1
-                        G.dropT[sig] = now
-                        warn("[TXR CardGuard] blocked second copy of my message (server echo)")
-                        return
-                    elseif G.dropT[sig] and (now - G.dropT[sig]) < 6 then
-                        G.dropT[sig] = now
-                        warn("[TXR CardGuard] blocked extra copy of my message")
-                        return
+            local isLocalCard = type(explicitMsgId) == "string" and explicitMsgId:sub(1, #localPrefix) == localPrefix
+            local fromPoll = (S.__txFreshUser == who) and ((os.clock() - (S.__txFreshAt or 0)) < 0.25)
+
+            -- a NEW message may re-use the text of an old deleted one
+            local _, _, cb = msg:match("^%[REP:([^|]+)|([^%]]+)%]%s*(.*)$")
+            local sig = who .. "::" .. tostring(cb or msg)
+            if S.deletedMsgSigs[sig] and (isLocalCard or (fromPoll and S.__txSigDelFresh[sig])) then
+                S.deletedMsgSigs[sig] = nil
+                S.__txSigDelFresh[sig] = nil
+                S.cardWrapperBySig[sig] = nil
+                pcall(saveDeletedMsgsDB)
+            end
+
+            if not privateUserTarget and who == myLowName then
+                local scopeKey = scopeType or "global"
+                if scopeKey == "global" or scopeKey == "server" then
+                    local now = os.clock()
+                    local gsig = scopeKey .. "|" .. msg
+                    if isLocalCard then
+                        G.localN[gsig] = (G.localN[gsig] or 0) + 1
+                        G.localT[gsig] = now
+                    else
+                        if (G.localN[gsig] or 0) > 0 and (now - (G.localT[gsig] or 0)) < 90 then
+                            G.localN[gsig] = G.localN[gsig] - 1
+                            G.dropT[gsig] = now
+                            warn("[TXR CardGuard] blocked second copy of my message (server echo)")
+                            return
+                        elseif G.dropT[gsig] and (now - G.dropT[gsig]) < 25 then
+                            G.dropT[gsig] = now
+                            warn("[TXR CardGuard] blocked extra copy of my message")
+                            return
+                        end
                     end
                 end
+            end
+
+            if fromPoll and not isLocalCard then
+                if qHead <= qTail or budgetUsed >= budgetNow() then
+                    if qHead > qTail then
+                        local feed = UI.messageFeed
+                        burstNearBottom = feed.CanvasPosition.Y >= feed.AbsoluteCanvasSize.Y - feed.AbsoluteWindowSize.Y - 150
+                    end
+                    qTail = qTail + 1
+                    Q[qTail] = { rawUserName, msg, privateUserTarget, isPrivateSender, msgJobId, scopeType, customTimeStr, explicitMsgId }
+                    burstCount = burstCount + 1
+                    return
+                end
+                budgetUsed = budgetUsed + 1
             end
         end
         return origAddMessageToFeed(rawUserName, msg, privateUserTarget, isPrivateSender, msgJobId, scopeType, customTimeStr, explicitMsgId)
     end
 
+    -- 4) Feed trim engine -----------------------------------------------------
+    task.spawn(function()
+        while _G.TXR_IsPolling and (_G.TXR_ChatInstanceID == currentExecutionID) and UI.gui and UI.gui.Parent do
+            task.wait(4)
+            pcall(function()
+                local feed = UI.messageFeed
+                local fps = (_G.TXR_Governor and _G.TXR_Governor.fps) or 60
+                local cap = (fps >= 45) and 320 or 200
+                local cards = {}
+                for _, c in ipairs(feed:GetChildren()) do
+                    if c:IsA("Frame") and c:GetAttribute("ChatScope") ~= nil then cards[#cards + 1] = c end
+                end
+                local extra = #cards - cap
+                if extra <= 0 then return end
+                if feed.CanvasPosition.Y < feed.AbsoluteCanvasSize.Y - feed.AbsoluteWindowSize.Y - 400 then return end
+                for i = 1, math.min(extra, 40) do cards[i]:Destroy() end
+                for k, v in pairs(S.cardWrapperById) do
+                    if not v.Parent then S.cardWrapperById[k] = nil end
+                end
+                for k, list in pairs(S.cardWrapperBySig) do
+                    for i = #list, 1, -1 do
+                        if not list[i].Parent then table.remove(list, i) end
+                    end
+                    if #list == 0 then S.cardWrapperBySig[k] = nil end
+                end
+            end)
+        end
+    end)
+
+    -- 5) Send guard -----------------------------------------------------------
     local prevReq = S.req
     if prevReq then
         local lastChatBody, lastChatT = nil, 0
@@ -11871,9 +12431,8 @@ pcall(function()
                 local b = opts.Body
                 if b:find("[GLB] ", 1, true) or b:find("[SRV:", 1, true) or b:find("Private", 1, true) then
                     local now = os.clock()
-                    -- Only block accidental double-tap within 0.08s so sending "." or "hi" repeatedly always goes through
-                    if b == lastChatBody and (now - lastChatT) < 0.08 then
-                        warn("[TXR SendGuard] identical chat POST within 0.08s blocked")
+                    if b == lastChatBody and (now - lastChatT) < 0.3 then
+                        warn("[TXR SendGuard] identical chat POST within 0.3s blocked")
                         return { Success = true, StatusCode = 200, Status = 200, Body = "{}" }
                     end
                     lastChatBody, lastChatT = b, now
@@ -11886,6 +12445,10 @@ end)
 
 -- =========================================================
 -- 💎 TXR 8K CLARITY ENGINE
+-- Roblox draws UI at the device's native resolution, so "8K look" = never stretching a
+-- low-res source. Every avatar thumbnail (48/60/100/150 px sources) is swapped for a
+-- 180/352/420 px one, and every web/banner image is fetched at high resolution, so on
+-- sharp phone / PC screens nothing is upscaled or blurry. Layout & effects are untouched.
 -- =========================================================
 pcall(function()
     local THUMB_UP = { [48] = 180, [50] = 180, [60] = 180, [75] = 180, [100] = 352, [110] = 352, [150] = 420 }
@@ -11925,6 +12488,7 @@ pcall(function()
         end
     end)
 
+    -- High-resolution web images (banners / default avatars served by unsplash)
     local origLoadWebImageAsync = loadWebImageAsync
     local function hiRes(u)
         if type(u) ~= "string" or not u:find("images.unsplash.com", 1, true) then return u end
@@ -11938,4 +12502,1141 @@ pcall(function()
     loadWebImageAsync = function(imgUrl, targetImageObj, onLoaded)
         return origLoadWebImageAsync(hiRes(imgUrl), targetImageObj, onLoaded)
     end
+end)
+
+-- =========================================================
+-- 🎞️ TXR MEME GUARD ENGINE (verified-only memes: no blank / broken / GIF-WEBP thumbnails)
+-- Roblox can only draw PNG / JPEG. Every web meme is byte-checked before it is shown,
+-- every Roblox decal is checked against the thumbnail service, and failures are removed.
+-- =========================================================
+pcall(function()
+    S.__memeAssetOK = S.__memeAssetOK or {}
+    S.__memeBadUrl = S.__memeBadUrl or {}
+    S.__memeFileChecked = S.__memeFileChecked or {}
+    local rerenderQueued = false
+
+    local function queueRerender()
+        if rerenderQueued then return end
+        rerenderQueued = true
+        task.delay(0.45, function()
+            rerenderQueued = false
+            if S.__memeRerender and UI.memeFrame and UI.memeFrame.Visible then pcall(S.__memeRerender) end
+        end)
+    end
+
+    local function dropMeme(assetId, url)
+        local removed = false
+        for i = #S.liveWebMemes, 1, -1 do
+            local it = S.liveWebMemes[i]
+            if it and ((assetId and tostring(it.assetId) == tostring(assetId)) or (url and it.url == url)) then
+                table.remove(S.liveWebMemes, i)
+                removed = true
+            end
+        end
+        if assetId then
+            for i = #VerifiedMemePool, 1, -1 do
+                if tostring(VerifiedMemePool[i].assetId) == tostring(assetId) then table.remove(VerifiedMemePool, i) end
+            end
+        end
+        if removed then queueRerender() end
+    end
+    S.__memeDrop = dropMeme
+
+    -- ---- Roblox decal verification (batched) ----
+    local queue, queued, running = {}, {}, false
+    local function runBatch()
+        if running then return end
+        running = true
+        task.spawn(function()
+            task.wait(0.12)
+            while #queue > 0 do
+                local ids = {}
+                while #queue > 0 and #ids < 40 do table.insert(ids, table.remove(queue, 1)) end
+                local ok, res = pcall(function()
+                    return S.req({
+                        Url = "https://thumbnails.roblox.com/v1/assets?assetIds=" .. table.concat(ids, ",") .. "&returnPolicy=PlaceHolder&size=110x110&format=Png&isCircular=false",
+                        Method = "GET", Headers = { ["User-Agent"] = "Roblox/WinInet" }
+                    })
+                end)
+                local verdict = {}
+                if ok and res and (res.StatusCode == 200 or res.Status == 200) and res.Body then
+                    local dOk, dec = pcall(function() return Svc.Http:JSONDecode(res.Body) end)
+                    if dOk and type(dec) == "table" and type(dec.data) == "table" then
+                        for _, row in ipairs(dec.data) do
+                            if type(row) == "table" and row.targetId then
+                                local st = tostring(row.state or "")
+                                verdict[tostring(row.targetId)] = (st == "Completed" or st == "Pending") and (row.imageUrl ~= nil and row.imageUrl ~= "")
+                            end
+                        end
+                    end
+                end
+                for _, id in ipairs(ids) do
+                    local v = verdict[id]
+                    if v == nil then v = true end -- service unreachable: keep optimistic
+                    S.__memeAssetOK[id] = v
+                    queued[id] = nil
+                    if v == false then dropMeme(id, nil) end
+                end
+                task.wait(0.05)
+            end
+            running = false
+        end)
+    end
+
+    S.__memeAssetCheck = function(mData, card)
+        if not S.req then return end
+        local id = tostring(mData.assetId)
+        local st = S.__memeAssetOK[id]
+        if st == true then return end
+        if st == false then dropMeme(id, nil); return end
+        if not queued[id] then
+            queued[id] = true
+            table.insert(queue, id)
+            runBatch()
+        end
+    end
+
+    -- verify the whole built-in pool right away so bad decals never reach the grid
+    task.spawn(function()
+        task.wait(1.2)
+        for _, item in ipairs(VerifiedMemePool) do
+            if item.assetId then
+                local id = tostring(item.assetId)
+                if S.__memeAssetOK[id] == nil and not queued[id] then
+                    queued[id] = true
+                    table.insert(queue, id)
+                end
+            end
+        end
+        runBatch()
+    end)
+
+    -- ---- Web meme byte verification (PNG / JPEG only) ----
+    local function magicOk(body)
+        if type(body) ~= "string" or #body < 1500 then return false end
+        local b1, b2, b3, b4 = body:byte(1, 4)
+        if b1 == 0x89 and b2 == 0x50 and b3 == 0x4E and b4 == 0x47 then return true end
+        if b1 == 0xFF and b2 == 0xD8 and b3 == 0xFF then return true end
+        return false
+    end
+
+    local origLoadForMemes = loadWebImageAsync
+    loadWebImageAsync = function(imgUrl, targetImageObj, onLoaded)
+        local isMemeCard = false
+        pcall(function()
+            isMemeCard = (typeof(targetImageObj) == "Instance") and (targetImageObj:GetAttribute("TXRMemeUrl") ~= nil)
+        end)
+        if not isMemeCard then
+            return origLoadForMemes(imgUrl, targetImageObj, onLoaded)
+        end
+        if not imgUrl or imgUrl == "" then return end
+        if S.webMemeCache[imgUrl] then
+            if targetImageObj.Parent then targetImageObj.Image = S.webMemeCache[imgUrl] end
+            if onLoaded then onLoaded(S.webMemeCache[imgUrl]) end
+            return
+        end
+        if S.__memeBadUrl[imgUrl] then
+            dropMeme(nil, imgUrl)
+            return
+        end
+        task.spawn(function()
+            if not S.req or not S.getCustomAsset then return end
+            local hash = 0
+            for i = 1, #imgUrl do hash = (hash * 31 + string.byte(imgUrl, i)) % 2147483647 end
+            local ext = imgUrl:lower():find("%.png") and ".png" or ".jpg"
+            local filePath = "TXR_WebMemes/p_" .. tostring(hash) .. ext
+            local good = false
+
+            if S.isF(filePath) then
+                if S.__memeFileChecked[filePath] then
+                    good = true
+                else
+                    local okR, data = pcall(S.readF, filePath)
+                    if okR and magicOk(data) then
+                        good = true
+                        S.__memeFileChecked[filePath] = true
+                    else
+                        pcall(function() if delfile then delfile(filePath) end end)
+                    end
+                end
+            end
+
+            if not good then
+                local waitGuard = 0
+                while S.activeDownloads >= 3 and waitGuard < 40 do
+                    waitGuard += 1
+                    task.wait(0.05)
+                end
+                if not targetImageObj.Parent then return end
+                S.activeDownloads += 1
+                local ok, res = pcall(function()
+                    return S.req({ Url = imgUrl, Method = "GET", Headers = { ["User-Agent"] = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36" } })
+                end)
+                S.activeDownloads = math.max(0, S.activeDownloads - 1)
+                if ok and res and (res.StatusCode == 200 or res.Status == 200) and magicOk(res.Body) then
+                    local wOk = pcall(function() S.writeF(filePath, res.Body) end)
+                    if wOk then
+                        good = true
+                        S.__memeFileChecked[filePath] = true
+                    end
+                end
+            end
+
+            if good then
+                local okAsset, assetUri = pcall(function() return S.getCustomAsset(filePath) end)
+                if okAsset and assetUri then
+                    S.webMemeCache[imgUrl] = assetUri
+                    if targetImageObj.Parent then targetImageObj.Image = assetUri end
+                    if onLoaded then onLoaded(assetUri) end
+                    return
+                end
+            end
+            S.__memeBadUrl[imgUrl] = true
+            dropMeme(nil, imgUrl)
+        end)
+    end
+end)
+
+-- =========================================================
+-- 💬 TXR GROUP CHAT (GC) ENGINE
+-- Event-sourced group chats over hidden packets: invites with Accept / Decline, join / decline
+-- notices inside the group, offline catch-up (history replay + local store), live presence
+-- search limited to players who are running this script in the same server.
+-- =========================================================
+pcall(function()
+    local GC = {}
+    S.GC = GC
+    local me = lp.Name:lower()
+    local FILE = "TXR_GC_V1_" .. tostring(lp.UserId) .. ".json"
+    local MAX_MEMBERS, MAX_MSGS = 25, 250
+    local TS = game:GetService("TextService")
+
+    GC.groups = {}
+    GC.seen, GC.seenList = {}, {}
+    GC.presence = {}
+    GC.viewGid = nil
+    GC.open = false
+
+    -- ---------------------------------------------------------
+    -- persistence
+    -- ---------------------------------------------------------
+    pcall(function()
+        if S.isF(FILE) then
+            local raw = S.readF(FILE)
+            local dec = raw and Svc.Http:JSONDecode(raw)
+            if type(dec) == "table" then
+                if type(dec.groups) == "table" then GC.groups = dec.groups end
+                if type(dec.seen) == "table" then
+                    for _, e in ipairs(dec.seen) do GC.seen[e] = true; table.insert(GC.seenList, e) end
+                end
+            end
+        end
+    end)
+    local dirty = false
+    local function save()
+        if dirty then return end
+        dirty = true
+        task.delay(1.2, function()
+            dirty = false
+            pcall(function()
+                local out = {}
+                for i = math.max(1, #GC.seenList - 2000), #GC.seenList do out[#out + 1] = GC.seenList[i] end
+                S.writeF(FILE, Svc.Http:JSONEncode({ groups = GC.groups, seen = out }))
+            end)
+        end)
+    end
+
+    -- ---------------------------------------------------------
+    -- small helpers
+    -- ---------------------------------------------------------
+    local function cnt(t) local n = 0 for _ in pairs(t or {}) do n = n + 1 end return n end
+    local function newId(prefix) return prefix .. me:sub(1, 5) .. tostring(os.time() % 100000) .. tostring(math.random(1000, 9999)) end
+    local function fmtTime(t) return os.date("%H:%M", t or os.time()) end
+    local function trunc(s, n) s = tostring(s or ""); if #s > n then return s:sub(1, n - 1) .. "…" end return s end
+    local function dispOf(low, fallback)
+        return (S.knownDispNames and S.knownDispNames[low]) or fallback or low
+    end
+    local PAL = {
+        { rgb(0, 200, 255), rgb(120, 80, 255) }, { rgb(255, 90, 150), rgb(255, 170, 60) }, { rgb(45, 235, 135), rgb(0, 170, 200) },
+        { rgb(255, 200, 70), rgb(255, 100, 80) }, { rgb(160, 90, 255), rgb(255, 80, 200) }, { rgb(70, 150, 255), rgb(0, 235, 200) },
+    }
+    local function palFor(s)
+        local h = 0
+        for i = 1, #s do h = (h * 31 + s:byte(i)) % 100003 end
+        return PAL[h % #PAL + 1]
+    end
+    local function textSize(txt, size, font, w)
+        local ok, v = pcall(function() return TS:GetTextSize(txt, size, font, Vector2.new(w, 10000)) end)
+        if ok and v then return v end
+        return Vector2.new(w, size * 2.2)
+    end
+    local function isOnline(low)
+        if low == me then return true end
+        local p = GC.presence[low]
+        local fresh = p and (os.clock() - p.t) < 75
+        if not fresh then
+            local a = S.activeUsersTable and S.activeUsersTable[low]
+            local t = type(a) == "table" and a.time or nil
+            fresh = t and (os.time() - t) < 120
+        end
+        return fresh and (findPlayerCI(low) ~= nil) or false
+    end
+
+    -- ---------------------------------------------------------
+    -- UI construction
+    -- ---------------------------------------------------------
+    local root = mk("Frame", UI.mainFrame, {
+        Name = "TXR_GC_Root", Size = UDim2.fromScale(1, 1), Position = UDim2.fromScale(0, 0), BackgroundColor3 = Colors.Background,
+        BorderSizePixel = 0, ZIndex = 400, Visible = false, ClipsDescendants = true, Active = true, Corner = UDim.new(0, 18)
+    })
+    local views, current, zTop = {}, nil, 1
+
+    local function newView(name)
+        local v = mk("Frame", root, { Name = name, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Colors.Background, BorderSizePixel = 0, Visible = false, ZIndex = 1, ClipsDescendants = true })
+        views[name] = v
+        return v
+    end
+
+    local function press(btn)
+        local sc2 = mk("UIScale", btn)
+        btn.MouseButton1Down:Connect(function() Svc.Tween:Create(sc2, TweenInfo.new(0.08, Enum.EasingStyle.Quad), { Scale = 0.95 }):Play() end)
+        local function up() Svc.Tween:Create(sc2, TweenInfo.new(0.16, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play() end
+        btn.MouseButton1Up:Connect(up)
+        btn.MouseLeave:Connect(up)
+    end
+    local function mkBtn(parent, props, text, cb)
+        props.Text = text
+        props.AutoButtonColor = false
+        props.Font = props.Font or Enum.Font.GothamBold
+        props.TextSize = props.TextSize or 11
+        props.TextColor3 = props.TextColor3 or Colors.Text
+        local b = mk("TextButton", parent, props)
+        press(b)
+        b.MouseButton1Click:Connect(function() pcall(cb) end)
+        return b
+    end
+    local function mkAvatar(parent, label, size, key, pos, anchor)
+        local pal = palFor(key or label or "x")
+        local f = mk("Frame", parent, { Size = UDim2.fromOffset(size, size), Position = pos or UDim2.new(), AnchorPoint = anchor or Vector2.new(0, 0), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 3, Corner = UDim.new(1, 0) })
+        mk("UIGradient", f, { Color = ColorSequence.new(pal[1], pal[2]), Rotation = 45 })
+        local l = mk("TextLabel", f, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = string.upper((tostring(label or "?"):gsub("[^%w]", "")):sub(1, 2)), TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = math.max(9, math.floor(size * 0.38)), ZIndex = 4 })
+        return f, l
+    end
+    local function mkHeader(view, title, subtitle, backFn)
+        local h = mk("Frame", view, { Size = UDim2.new(1, 0, 0, 52), BackgroundColor3 = Colors.Surface, BackgroundTransparency = 0.12, BorderSizePixel = 0, ZIndex = 5 })
+        mk("Frame", h, { Size = UDim2.new(1, 0, 0, 1), AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), BackgroundColor3 = rgb(34, 44, 64), BorderSizePixel = 0, ZIndex = 6 })
+        local back = mkBtn(h, { Size = UDim2.fromOffset(32, 32), Position = UDim2.fromOffset(10, 10), BackgroundColor3 = rgb(22, 30, 46), ZIndex = 7, Corner = UDim.new(1, 0), TextSize = 18, Font = Enum.Font.GothamBlack }, "‹", backFn)
+        local t = mk("TextLabel", h, { Size = UDim2.new(1, -150, 0, 20), Position = UDim2.fromOffset(52, 8), BackgroundTransparency = 1, Text = title, TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 7 })
+        local s = mk("TextLabel", h, { Size = UDim2.new(1, -150, 0, 14), Position = UDim2.fromOffset(52, 28), BackgroundTransparency = 1, Text = subtitle or "", TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 7 })
+        return h, t, s, back
+    end
+
+    local function showView(name, dir)
+        local nv = views[name]
+        if not nv or nv == current then return end
+        local old = current
+        current = nv
+        dir = dir or 1
+        zTop = zTop + 1
+        nv.ZIndex = zTop
+        nv.Position = UDim2.new(dir * 0.32, 0, 0, 0)
+        nv.Visible = true
+        Svc.Tween:Create(nv, TweenInfo.new(0.30, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(0, 0, 0, 0) }):Play()
+        if old then
+            Svc.Tween:Create(old, TweenInfo.new(0.30, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(-dir * 0.18, 0, 0, 0) }):Play()
+            task.delay(0.32, function() if old ~= current then old.Visible = false end end)
+        end
+    end
+
+    -- ======================= LIST VIEW =======================
+    local vList = newView("list")
+    local listHeader, listTitle, listSub = mkHeader(vList, "Group Chats", "", function() GC.close() end)
+    local newBtn = mkBtn(listHeader, { Size = UDim2.fromOffset(32, 32), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 10), BackgroundColor3 = Colors.Primary, TextColor3 = Colors.TextDark, ZIndex = 7, Corner = UDim.new(1, 0), TextSize = 20, Font = Enum.Font.GothamBlack }, "+", function() GC.openPicker("create") end)
+    local listScroll = mk("ScrollingFrame", vList, { Size = UDim2.new(1, 0, 1, -52), Position = UDim2.fromOffset(0, 52), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageColor3 = Colors.Primary, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 2 })
+    mk("UIListLayout", listScroll, { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder })
+    mk("UIPadding", listScroll, { PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), PaddingBottom = UDim.new(0, 14) })
+
+    -- ======================= CHAT VIEW =======================
+    local vChat = newView("chat")
+    local chatHeader, chatTitle, chatSub, chatBack = mkHeader(vChat, "", "", function() GC.viewGid = nil; GC.renderList(); showView("list", -1) end)
+    local chatAvatarHost = mk("Frame", chatHeader, { Size = UDim2.fromOffset(34, 34), Position = UDim2.fromOffset(48, 9), BackgroundTransparency = 1, ZIndex = 7 })
+    chatTitle.Position = UDim2.fromOffset(90, 8); chatTitle.Size = UDim2.new(1, -170, 0, 20)
+    chatSub.Position = UDim2.fromOffset(90, 28); chatSub.Size = UDim2.new(1, -170, 0, 14)
+    local infoBtn = mkBtn(chatHeader, { Size = UDim2.fromOffset(32, 32), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 10), BackgroundColor3 = rgb(22, 30, 46), ZIndex = 7, Corner = UDim.new(1, 0), TextSize = 14 }, "ⓘ", function() if GC.viewGid then GC.openInfo(GC.viewGid) end end)
+    local chatScroll = mk("ScrollingFrame", vChat, { Size = UDim2.new(1, 0, 1, -112), Position = UDim2.fromOffset(0, 52), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageColor3 = Colors.Primary, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 2 })
+    mk("UIListLayout", chatScroll, { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder })
+    mk("UIPadding", chatScroll, { PaddingTop = UDim.new(0, 8), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), PaddingBottom = UDim.new(0, 8) })
+    local composer = mk("Frame", vChat, { Size = UDim2.new(1, -20, 0, 42), AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -10), BackgroundColor3 = rgb(13, 18, 29), ZIndex = 6, Corner = UDim.new(1, 0), Stroke = { Thickness = 1.2, Color = Colors.PrimaryDark, Transparency = 0.45 } })
+    local gcInput = mk("TextBox", composer, { Size = UDim2.new(1, -62, 1, 0), Position = UDim2.fromOffset(16, 0), BackgroundTransparency = 1, Text = "", PlaceholderText = "Message the group...", PlaceholderColor3 = Colors.SubText, TextColor3 = Colors.Text, Font = Enum.Font.GothamMedium, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 7 })
+    local gcSend = mkBtn(composer, { Size = UDim2.fromOffset(32, 32), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -5, 0.5, 0), BackgroundColor3 = Colors.Primary, TextColor3 = Colors.TextDark, ZIndex = 7, Corner = UDim.new(1, 0), TextSize = 15, Font = Enum.Font.GothamBlack }, "➤", function() GC.sendText() end)
+    gcInput.FocusLost:Connect(function(enter) if enter then GC.sendText() end end)
+
+    -- ======================= PICKER VIEW =======================
+    local vPick = newView("picker")
+    local pickHeader, pickTitle, pickSub = mkHeader(vPick, "New Group", "", function() showView(GC.pickReturn or "list", -1) end)
+    local nameBox = mk("TextBox", vPick, { Size = UDim2.new(1, -24, 0, 34), Position = UDim2.fromOffset(12, 60), BackgroundColor3 = rgb(16, 22, 34), Text = "", PlaceholderText = "Group name", PlaceholderColor3 = Colors.SubText, TextColor3 = Colors.Text, Font = Enum.Font.GothamBold, TextSize = 12, ClearTextOnFocus = false, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4, Corner = UDim.new(0, 10), Stroke = { Thickness = 1, Color = rgb(42, 52, 74), Transparency = 0.2 } })
+    mk("UIPadding", nameBox, { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) })
+    local searchBox = mk("TextBox", vPick, { Size = UDim2.new(1, -24, 0, 32), Position = UDim2.fromOffset(12, 100), BackgroundColor3 = rgb(16, 22, 34), Text = "", PlaceholderText = "Search players running TXR here...", PlaceholderColor3 = Colors.SubText, TextColor3 = Colors.Text, Font = Enum.Font.GothamMedium, TextSize = 11.5, ClearTextOnFocus = false, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4, Corner = UDim.new(0, 10), Stroke = { Thickness = 1, Color = rgb(42, 52, 74), Transparency = 0.2 } })
+    mk("UIPadding", searchBox, { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) })
+    local pickScroll = mk("ScrollingFrame", vPick, { Size = UDim2.new(1, 0, 1, -190), Position = UDim2.fromOffset(0, 138), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageColor3 = Colors.Primary, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 2 })
+    mk("UIListLayout", pickScroll, { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder })
+    mk("UIPadding", pickScroll, { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), PaddingTop = UDim.new(0, 2) })
+    local pickBar = mk("Frame", vPick, { Size = UDim2.new(1, 0, 0, 50), AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), BackgroundColor3 = Colors.Surface, BorderSizePixel = 0, ZIndex = 5 })
+    local pickCount = mk("TextLabel", pickBar, { Size = UDim2.new(0.5, -12, 1, 0), Position = UDim2.fromOffset(14, 0), BackgroundTransparency = 1, Text = "0 selected", TextColor3 = Colors.SubText, Font = Enum.Font.GothamBold, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6 })
+    local pickGo = mkBtn(pickBar, { Size = UDim2.fromOffset(150, 34), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), BackgroundColor3 = Colors.Primary, TextColor3 = Colors.TextDark, ZIndex = 6, Corner = UDim.new(1, 0), TextSize = 12, Font = Enum.Font.GothamBlack }, "Create Group", function() GC.confirmPicker() end)
+
+    -- ======================= INFO VIEW =======================
+    local vInfo = newView("info")
+    local infoHeader, infoTitle, infoSub = mkHeader(vInfo, "Group Info", "", function() showView("chat", -1) end)
+    local infoScroll = mk("ScrollingFrame", vInfo, { Size = UDim2.new(1, 0, 1, -52), Position = UDim2.fromOffset(0, 52), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageColor3 = Colors.Primary, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 2 })
+    mk("UIListLayout", infoScroll, { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Center })
+    mk("UIPadding", infoScroll, { PaddingTop = UDim.new(0, 12), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), PaddingBottom = UDim.new(0, 16) })
+
+    -- ---------------------------------------------------------
+    -- toast notifications (slide-in banner, optional Accept / Decline)
+    -- ---------------------------------------------------------
+    local toast
+    local function clearToast()
+        if toast and toast.Parent then
+            local t = toast
+            toast = nil
+            Svc.Tween:Create(t, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Position = UDim2.new(0.5, 0, 0, -100) }):Play()
+            task.delay(0.25, function() if t then t:Destroy() end end)
+        end
+    end
+    local function notify(title, body, gidForInvite, ttl)
+        pcall(function()
+            if not UI.mainFrame.Visible then
+                pcall(function() triggerOrbToast(title, body) end)
+            end
+            if toast then toast:Destroy(); toast = nil end
+            local hasBtns = gidForInvite ~= nil
+            local t = mk("Frame", UI.mainFrame, {
+                Size = UDim2.new(1, -28, 0, hasBtns and 86 or 54), AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, -100),
+                BackgroundColor3 = rgb(14, 20, 32), BackgroundTransparency = 0.04, ZIndex = 470, Corner = UDim.new(0, 14),
+                Stroke = { Thickness = 1.3, Color = Colors.Primary, Transparency = 0.25 }
+            })
+            toast = t
+            mk("UIGradient", t, { Color = ColorSequence.new(rgb(255, 255, 255), rgb(190, 205, 235)), Rotation = 90 })
+            mkAvatar(t, title, 34, title, UDim2.fromOffset(10, 10)).ZIndex = 472
+            mk("TextLabel", t, { Size = UDim2.new(1, -66, 0, 16), Position = UDim2.fromOffset(54, 8), BackgroundTransparency = 1, Text = title, TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 11.5, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 472 })
+            mk("TextLabel", t, { Size = UDim2.new(1, -66, 0, 24), Position = UDim2.fromOffset(54, 24), BackgroundTransparency = 1, Text = body, TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextWrapped = true, ZIndex = 472 })
+            if hasBtns then
+                mkBtn(t, { Size = UDim2.new(0.5, -17, 0, 26), Position = UDim2.new(0, 12, 1, -34), BackgroundColor3 = rgb(40, 18, 26), TextColor3 = Colors.Danger, ZIndex = 473, Corner = UDim.new(0, 9), TextSize = 10.5, Stroke = { Thickness = 1, Color = Colors.Danger, Transparency = 0.5 } }, "Decline", function() clearToast(); GC.respond(gidForInvite, false) end)
+                mkBtn(t, { Size = UDim2.new(0.5, -17, 0, 26), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 1, -34), BackgroundColor3 = Colors.OnlineGreen, TextColor3 = Colors.TextDark, ZIndex = 473, Corner = UDim.new(0, 9), TextSize = 10.5, Font = Enum.Font.GothamBlack }, "Accept", function() clearToast(); GC.respond(gidForInvite, true) end)
+            else
+                local hit = mk("TextButton", t, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 474 })
+                hit.MouseButton1Click:Connect(function() clearToast(); GC.openFromToast() end)
+            end
+            Svc.Tween:Create(t, TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Position = UDim2.new(0.5, 0, 0, 56) }):Play()
+            pcall(playSFX, "default")
+            task.delay(ttl or (hasBtns and 14 or 5), function() if toast == t then clearToast() end end)
+        end)
+    end
+    GC.notify = notify
+
+    -- ---------------------------------------------------------
+    -- entry button + badge
+    -- ---------------------------------------------------------
+    local entryBtn = createHeaderBtn("GC", function() if GC.open then GC.close() else GC.openUI() end end, 34)
+    entryBtn.LayoutOrder = -10
+    entryBtn.TextColor3 = Colors.Primary
+    pcall(function() headerRightCluster.Size = headerRightCluster.Size + UDim2.fromOffset(39, 0) end)
+    local badge = mk("Frame", entryBtn, { Size = UDim2.fromOffset(14, 14), AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(1, -2, 0, 2), BackgroundColor3 = Colors.Danger, Visible = false, ZIndex = 40, Corner = UDim.new(1, 0) })
+    local badgeTxt = mk("TextLabel", badge, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "0", TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 8, ZIndex = 41 })
+    local function totalAlerts()
+        local n = 0
+        for _, g in pairs(GC.groups) do
+            if g.pending and g.pending[me] then n = n + 1 elseif g.members and g.members[me] then n = n + (g.unread or 0) end
+        end
+        return n
+    end
+    local function refreshBadge()
+        local n = totalAlerts()
+        badge.Visible = n > 0
+        badgeTxt.Text = n > 9 and "9+" or tostring(n)
+    end
+
+    -- ---------------------------------------------------------
+    -- rendering
+    -- ---------------------------------------------------------
+    local function clearKids(sc3, keepClass)
+        for _, c in ipairs(sc3:GetChildren()) do
+            if not c:IsA("UIListLayout") and not c:IsA("UIPadding") then c:Destroy() end
+        end
+    end
+
+    local function myState(g)
+        if g.members and g.members[me] then return "member" end
+        if g.pending and g.pending[me] then return "pending" end
+        return nil
+    end
+
+    function GC.renderList()
+        if not listScroll.Parent then return end
+        clearKids(listScroll)
+        local invites, mine = {}, {}
+        for gid, g in pairs(GC.groups) do
+            local st = myState(g)
+            if st == "pending" then table.insert(invites, g) elseif st == "member" then table.insert(mine, g) end
+        end
+        table.sort(invites, function(a, b) return (a.last or 0) > (b.last or 0) end)
+        table.sort(mine, function(a, b) return (a.last or a.created or 0) > (b.last or b.created or 0) end)
+        listSub.Text = string.format("%d groups  •  %d invitations", #mine, #invites)
+        local order = 0
+        local function nextOrder() order = order + 1; return order end
+
+        if #invites > 0 then
+            mk("TextLabel", listScroll, { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, Text = "INVITATIONS", TextColor3 = Colors.Warning, Font = Enum.Font.GothamBlack, TextSize = 9.5, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = nextOrder(), ZIndex = 3 })
+            for _, g in ipairs(invites) do
+                local card = mk("Frame", listScroll, { Size = UDim2.new(1, 0, 0, 92), BackgroundColor3 = rgb(24, 22, 14), LayoutOrder = nextOrder(), ZIndex = 3, Corner = UDim.new(0, 14), Stroke = { Thickness = 1.2, Color = Colors.Warning, Transparency = 0.45 } })
+                mkAvatar(card, g.name, 40, g.id, UDim2.fromOffset(12, 12))
+                mk("TextLabel", card, { Size = UDim2.new(1, -74, 0, 16), Position = UDim2.fromOffset(62, 10), BackgroundTransparency = 1, Text = g.name, TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 12.5, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
+                mk("TextLabel", card, { Size = UDim2.new(1, -74, 0, 14), Position = UDim2.fromOffset(62, 28), BackgroundTransparency = 1, Text = string.format("%s invited you  •  %d members", trunc(g.inviter or "Someone", 18), cnt(g.members)), TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
+                mkBtn(card, { Size = UDim2.new(0.5, -17, 0, 28), Position = UDim2.new(0, 12, 1, -38), BackgroundColor3 = rgb(40, 18, 26), TextColor3 = Colors.Danger, ZIndex = 4, Corner = UDim.new(0, 10), TextSize = 11, Stroke = { Thickness = 1, Color = Colors.Danger, Transparency = 0.5 } }, "Decline", function() GC.respond(g.id, false) end)
+                mkBtn(card, { Size = UDim2.new(0.5, -17, 0, 28), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 1, -38), BackgroundColor3 = Colors.OnlineGreen, TextColor3 = Colors.TextDark, ZIndex = 4, Corner = UDim.new(0, 10), TextSize = 11, Font = Enum.Font.GothamBlack }, "Accept", function() GC.respond(g.id, true) end)
+            end
+        end
+
+        if #mine > 0 then
+            mk("TextLabel", listScroll, { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, Text = "YOUR GROUPS", TextColor3 = Colors.SubText, Font = Enum.Font.GothamBlack, TextSize = 9.5, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = nextOrder(), ZIndex = 3 })
+            for _, g in ipairs(mine) do
+                local row = mk("TextButton", listScroll, { Size = UDim2.new(1, 0, 0, 58), BackgroundColor3 = rgb(16, 22, 34), AutoButtonColor = false, Text = "", LayoutOrder = nextOrder(), ZIndex = 3, Corner = UDim.new(0, 14), Stroke = { Thickness = 1, Color = rgb(34, 44, 64), Transparency = 0.2 } })
+                press(row)
+                mkAvatar(row, g.name, 40, g.id, UDim2.fromOffset(10, 9))
+                mk("TextLabel", row, { Size = UDim2.new(1, -140, 0, 16), Position = UDim2.fromOffset(60, 10), BackgroundTransparency = 1, Text = g.name, TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 12.5, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
+                local last = g.msgs and g.msgs[#g.msgs]
+                local snippet = "No messages yet — say hi!"
+                if last then snippet = last.s and last.x or ((last.u == me and "You" or trunc(last.d or last.u, 12)) .. ": " .. last.x) end
+                mk("TextLabel", row, { Size = UDim2.new(1, -140, 0, 14), Position = UDim2.fromOffset(60, 30), BackgroundTransparency = 1, Text = trunc(snippet, 48), TextColor3 = (g.unread or 0) > 0 and Colors.Text or Colors.SubText, Font = (g.unread or 0) > 0 and Enum.Font.GothamBold or Enum.Font.GothamMedium, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
+                mk("TextLabel", row, { Size = UDim2.fromOffset(50, 12), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 12), BackgroundTransparency = 1, Text = last and fmtTime(last.t) or "", TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4 })
+                if (g.unread or 0) > 0 then
+                    local ub = mk("Frame", row, { Size = UDim2.fromOffset(18, 18), AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 30), BackgroundColor3 = Colors.Purple, ZIndex = 4, Corner = UDim.new(1, 0) })
+                    mk("TextLabel", ub, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = g.unread > 99 and "99+" or tostring(g.unread), TextColor3 = Color3.new(1, 1, 1), Font = Enum.Font.GothamBlack, TextSize = 9, ZIndex = 5 })
+                end
+                row.MouseButton1Click:Connect(function() GC.openChat(g.id) end)
+            end
+        end
+
+        if #mine == 0 and #invites == 0 then
+            local empty = mk("Frame", listScroll, { Size = UDim2.new(1, 0, 0, 220), BackgroundTransparency = 1, LayoutOrder = 1, ZIndex = 3 })
+            mk("TextLabel", empty, { Size = UDim2.new(1, 0, 0, 60), Position = UDim2.fromOffset(0, 40), BackgroundTransparency = 1, Text = "💬", TextSize = 44, Font = Enum.Font.GothamBlack, TextColor3 = Colors.Text, ZIndex = 4 })
+            mk("TextLabel", empty, { Size = UDim2.new(1, 0, 0, 20), Position = UDim2.fromOffset(0, 106), BackgroundTransparency = 1, Text = "No group chats yet", TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 14, ZIndex = 4 })
+            mk("TextLabel", empty, { Size = UDim2.new(1, -40, 0, 36), Position = UDim2.fromOffset(20, 130), BackgroundTransparency = 1, Text = "Tap + to start a group with players who are running TXR in this server. Chats keep going even when members are offline.", TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 10.5, TextWrapped = true, ZIndex = 4 })
+        end
+        refreshBadge()
+    end
+
+    -- chat bubbles
+    local function buildBubble(g, m)
+        if m.s then
+            local pill = mk("Frame", chatScroll, { Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = (m.n or 0), ZIndex = 3 })
+            mk("TextLabel", pill, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "•  " .. m.x .. "  •", TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 9.5, ZIndex = 4 })
+            return pill
+        end
+        local own = (m.u == me)
+        local maxW = 250
+        local body = m.x
+        local tsz = textSize(body, 11.5, Enum.Font.GothamMedium, maxW - 24)
+        local nameTxt = own and "" or (m.d or m.u)
+        local nameW = own and 0 or textSize(nameTxt, 9.5, Enum.Font.GothamBold, 400).X
+        local bw = math.clamp(math.max(tsz.X, nameW, 40) + 26, 74, maxW)
+        local bh = math.ceil(tsz.Y) + (own and 22 or 36)
+        local wrap = mk("Frame", chatScroll, { Size = UDim2.new(1, 0, 0, bh), BackgroundTransparency = 1, LayoutOrder = (m.n or 0), ZIndex = 3 })
+        local bub = mk("Frame", wrap, { Size = UDim2.fromOffset(bw, bh), AnchorPoint = Vector2.new(own and 1 or 0, 0), Position = UDim2.new(own and 1 or 0, 0, 0, 0), BackgroundColor3 = own and rgb(22, 54, 88) or rgb(20, 27, 42), ZIndex = 4, Corner = UDim.new(0, 14), Stroke = { Thickness = 1, Color = own and Colors.PrimaryDark or rgb(38, 50, 72), Transparency = 0.35 } })
+        if own then mk("UIGradient", bub, { Color = ColorSequence.new(rgb(255, 255, 255), rgb(200, 215, 240)), Rotation = 90 }) end
+        local y = 6
+        if not own then
+            local pal = palFor(m.u)
+            mk("TextLabel", bub, { Size = UDim2.new(1, -20, 0, 13), Position = UDim2.fromOffset(12, 5), BackgroundTransparency = 1, Text = nameTxt, TextColor3 = pal[1], Font = Enum.Font.GothamBold, TextSize = 9.5, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 5 })
+            y = 19
+        end
+        mk("TextLabel", bub, { Size = UDim2.new(1, -24, 0, math.ceil(tsz.Y)), Position = UDim2.fromOffset(12, y), BackgroundTransparency = 1, Text = body, TextColor3 = Colors.Text, Font = Enum.Font.GothamMedium, TextSize = 11.5, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, ZIndex = 5 })
+        mk("TextLabel", bub, { Size = UDim2.fromOffset(40, 10), AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -10, 1, -4), BackgroundTransparency = 1, Text = fmtTime(m.t), TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 8, TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 5 })
+        -- tiny pop-in
+        bub.BackgroundTransparency = 1
+        Svc.Tween:Create(bub, TweenInfo.new(0.18, Enum.EasingStyle.Quad), { BackgroundTransparency = 0 }):Play()
+        return wrap
+    end
+
+    local function scrollBottom(force)
+        task.defer(function()
+            task.wait()
+            pcall(function()
+                local maxY = math.max(0, chatScroll.AbsoluteCanvasSize.Y - chatScroll.AbsoluteWindowSize.Y)
+                if force or (maxY - chatScroll.CanvasPosition.Y) < 160 then chatScroll.CanvasPosition = Vector2.new(0, maxY + 200) end
+            end)
+        end)
+    end
+
+    local function updateChatHeader(g)
+        chatTitle.Text = g.name
+        local online = 0
+        for u in pairs(g.members) do if isOnline(u) then online = online + 1 end end
+        chatSub.Text = string.format("%d members  •  %d online", cnt(g.members), online)
+        for _, c in ipairs(chatAvatarHost:GetChildren()) do c:Destroy() end
+        mkAvatar(chatAvatarHost, g.name, 34, g.id, UDim2.new(), Vector2.new(0, 0))
+    end
+
+    function GC.renderChat(gid)
+        local g = GC.groups[gid]
+        if not g then return end
+        updateChatHeader(g)
+        clearKids(chatScroll)
+        local start = math.max(1, #g.msgs - 120)
+        for i = start, #g.msgs do
+            local m = g.msgs[i]
+            GC.ord = (GC.ord or 0) + 1
+            m.n = GC.ord
+            buildBubble(g, m)
+        end
+        scrollBottom(true)
+    end
+
+    function GC.openChat(gid)
+        local g = GC.groups[gid]
+        if not g or not g.members[me] then return end
+        GC.viewGid = gid
+        g.unread = 0
+        GC.renderChat(gid)
+        showView("chat", 1)
+        refreshBadge()
+        save()
+    end
+
+    function GC.openFromToast()
+        GC.openUI()
+        GC.renderList()
+    end
+
+    -- ---------------------------------------------------------
+    -- picker (create group / add members)
+    -- ---------------------------------------------------------
+    local pickMode, pickGid, picked = "create", nil, {}
+    local pickConnTick = 0
+
+    local function candidateList()
+        local list, seen = {}, {}
+        local q = searchBox.Text:lower():gsub("^%s+", ""):gsub("%s+$", "")
+        local g = pickGid and GC.groups[pickGid]
+        local function consider(low, disp)
+            if low == me or seen[low] then return end
+            if g and ((g.members and g.members[low]) or (g.pending and g.pending[low])) then return end
+            if not isOnline(low) then return end
+            local plr = findPlayerCI(low)
+            if not plr then return end
+            seen[low] = true
+            local d = disp or plr.DisplayName or low
+            if q ~= "" and not (low:find(q, 1, true) or tostring(d):lower():find(q, 1, true)) then return end
+            table.insert(list, { low = low, disp = d, uid = plr.UserId, name = plr.Name })
+        end
+        for low, p in pairs(GC.presence) do consider(low, p.disp) end
+        for low, a in pairs(S.activeUsersTable or {}) do
+            if type(a) == "table" then consider(low, a.disp) end
+        end
+        table.sort(list, function(a, b) return a.disp:lower() < b.disp:lower() end)
+        return list
+    end
+
+    local function updatePickBar()
+        local n = cnt(picked)
+        pickCount.Text = n .. " selected"
+        pickGo.BackgroundTransparency = (pickMode == "create" or n > 0) and 0 or 0.55
+    end
+
+    local function renderPicker()
+        clearKids(pickScroll)
+        local list = candidateList()
+        if #list == 0 then
+            mk("TextLabel", pickScroll, { Size = UDim2.new(1, 0, 0, 80), BackgroundTransparency = 1, Text = "No other TXR users found in this server yet.\nAsk friends to run the script — they appear here instantly.", TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 10.5, TextWrapped = true, ZIndex = 3 })
+        end
+        for i, c in ipairs(list) do
+            local row = mk("TextButton", pickScroll, { Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = picked[c.low] and rgb(20, 44, 66) or rgb(16, 22, 34), AutoButtonColor = false, Text = "", LayoutOrder = i, ZIndex = 3, Corner = UDim.new(0, 12), Stroke = { Thickness = 1, Color = picked[c.low] and Colors.Primary or rgb(34, 44, 64), Transparency = 0.3 } })
+            press(row)
+            local av = mk("ImageLabel", row, { Size = UDim2.fromOffset(32, 32), Position = UDim2.fromOffset(8, 7), BackgroundColor3 = rgb(26, 34, 52), Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=100&h=100", c.uid), ZIndex = 4, Corner = UDim.new(1, 0) })
+            mk("TextLabel", row, { Size = UDim2.new(1, -110, 0, 15), Position = UDim2.fromOffset(48, 6), BackgroundTransparency = 1, Text = c.disp, TextColor3 = Colors.Text, Font = Enum.Font.GothamBold, TextSize = 11.5, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
+            mk("TextLabel", row, { Size = UDim2.new(1, -110, 0, 12), Position = UDim2.fromOffset(48, 24), BackgroundTransparency = 1, Text = "@" .. c.name .. "  •  ● online", TextColor3 = Colors.OnlineGreen, Font = Enum.Font.GothamMedium, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4 })
+            local chk = mk("Frame", row, { Size = UDim2.fromOffset(20, 20), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), BackgroundColor3 = picked[c.low] and Colors.Primary or rgb(22, 30, 46), ZIndex = 4, Corner = UDim.new(1, 0), Stroke = { Thickness = 1.2, Color = picked[c.low] and Colors.Primary or rgb(60, 74, 100), Transparency = 0.2 } })
+            mk("TextLabel", chk, { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = picked[c.low] and "✓" or "", TextColor3 = Colors.TextDark, Font = Enum.Font.GothamBlack, TextSize = 12, ZIndex = 5 })
+            row.MouseButton1Click:Connect(function()
+                if picked[c.low] then picked[c.low] = nil else
+                    if cnt(picked) + (pickGid and cnt(GC.groups[pickGid].members) + cnt(GC.groups[pickGid].pending) or 1) >= MAX_MEMBERS then notify("Group is full", "Maximum " .. MAX_MEMBERS .. " members per group.", nil, 3); return end
+                    picked[c.low] = { d = c.disp }
+                end
+                renderPicker(); updatePickBar()
+            end)
+        end
+        updatePickBar()
+    end
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function() if current == vPick then renderPicker() end end)
+
+    function GC.requestPresence()
+        task.spawn(function()
+            if not S.req then return end
+            pcall(function()
+                S.req({ Url = S.SERVER_URL .. "/send", Method = "POST", Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "__GCP__:?", jobId = game.JobId, hidden = true }) })
+            end)
+        end)
+    end
+
+    function GC.openPicker(mode, gid)
+        pickMode, pickGid, picked = mode, gid, {}
+        GC.pickReturn = (mode == "add") and "info" or "list"
+        searchBox.Text = ""
+        nameBox.Text = ""
+        nameBox.Visible = (mode == "create")
+        searchBox.Position = (mode == "create") and UDim2.fromOffset(12, 100) or UDim2.fromOffset(12, 60)
+        pickScroll.Position = (mode == "create") and UDim2.fromOffset(0, 138) or UDim2.fromOffset(0, 98)
+        pickScroll.Size = (mode == "create") and UDim2.new(1, 0, 1, -190) or UDim2.new(1, 0, 1, -150)
+        pickTitle.Text = (mode == "create") and "New Group" or "Add Members"
+        pickSub.Text = (mode == "create") and "Only players running TXR in this server" or trunc(GC.groups[gid] and GC.groups[gid].name or "", 28)
+        pickGo.Text = (mode == "create") and "Create Group" or "Send Invites"
+        renderPicker()
+        showView("picker", 1)
+        GC.requestPresence()
+        task.spawn(function()
+            local myTick = os.clock()
+            pickConnTick = myTick
+            while GC.open and current == vPick and pickConnTick == myTick do
+                task.wait(2.2)
+                if current == vPick and pickConnTick == myTick and not searchBox:IsFocused() then pcall(renderPicker) end
+            end
+        end)
+    end
+
+    function GC.confirmPicker()
+        local list = {}
+        for low, v in pairs(picked) do table.insert(list, { u = low, d = v.d }) end
+        if pickMode == "create" then
+            local nm = nameBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+            if nm == "" then notify("Name your group", "Enter a group name to continue.", nil, 3); return end
+            if #list == 0 then notify("Pick members", "Select at least one online player to invite.", nil, 3); return end
+            nm = trunc(nm, 26)
+            local gid = newId("g")
+            GC.emit({ k = "c", g = gid, n = nm, u = me, d = lp.DisplayName, iv = list })
+            GC.openChat(gid)
+        else
+            local g = GC.groups[pickGid]
+            if not g or #list == 0 then return end
+            local mm = {}
+            for u, v in pairs(g.members) do table.insert(mm, { u = u, d = v.d, r = v.r }) end
+            for _, it in ipairs(list) do
+                GC.emit({ k = "i", g = pickGid, n = g.name, u = me, d = lp.DisplayName, to = it, mm = mm })
+            end
+            GC.openInfo(pickGid)
+        end
+    end
+
+    -- ---------------------------------------------------------
+    -- info view
+    -- ---------------------------------------------------------
+    function GC.openInfo(gid)
+        local g = GC.groups[gid]
+        if not g then return end
+        clearKids(infoScroll)
+        infoSub.Text = trunc(g.name, 30)
+        local o = 0
+        local function ord() o = o + 1; return o end
+        local top = mk("Frame", infoScroll, { Size = UDim2.new(1, 0, 0, 120), BackgroundTransparency = 1, LayoutOrder = ord(), ZIndex = 3 })
+        mkAvatar(top, g.name, 64, g.id, UDim2.new(0.5, 0, 0, 4), Vector2.new(0.5, 0))
+        mk("TextLabel", top, { Size = UDim2.new(1, 0, 0, 20), Position = UDim2.fromOffset(0, 74), BackgroundTransparency = 1, Text = g.name, TextColor3 = Colors.Text, Font = Enum.Font.GothamBlack, TextSize = 15, ZIndex = 4 })
+        mk("TextLabel", top, { Size = UDim2.new(1, 0, 0, 14), Position = UDim2.fromOffset(0, 96), BackgroundTransparency = 1, Text = string.format("Created by %s  •  %d members", dispOf(g.owner, g.members[g.owner] and g.members[g.owner].d), cnt(g.members)), TextColor3 = Colors.SubText, Font = Enum.Font.GothamMedium, TextSize = 10, ZIndex = 4 })
+        local amOwner = (g.owner == me)
+        local function actionBtn(text, color, cb)
+            local b = mkBtn(infoScroll, { Size = UDim2.new(1, 0, 0, 36), BackgroundColor3 = rgb(16, 22, 34), TextColor3 = color, LayoutOrder = ord(), ZIndex = 3, Corner = UDim.new(0, 12), TextSize = 11.5, Stroke = { Thickness = 1, Color = color, Transparency = 0.6 } }, text, cb)
+            return b
+        end
+        actionBtn("＋  Add members", Colors.Primary, function() GC.openPicker("add", gid) end)
+        if amOwner then
+            local rn = mk("TextBox", infoScroll, { Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = rgb(16, 22, 34), Text = "", PlaceholderText = "Rename group (press Enter)", PlaceholderColor3 = Colors.SubText, TextColor3 = Colors.Text, Font = Enum.Font.GothamBold, TextSize = 11.5, ClearTextOnFocus = false, LayoutOrder = ord(), ZIndex = 3, Corner = UDim.new(0, 12), Stroke = { Thickness = 1, Color = rgb(42, 52, 74), Transparency = 0.2 } })
+            rn.FocusLost:Connect(function(enter)
+                local nm = rn.Text:gsub("^%s+", ""):gsub("%s+$", "")
+                if enter and nm ~= "" then GC.emit({ k = "r", g = gid, n = trunc(nm, 26), u = me, d = lp.DisplayName }); GC.openInfo(gid) end
+            end)
+        end
+        mk("TextLabel", infoScroll, { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, Text = "MEMBERS", TextColor3 = Colors.SubText, Font = Enum.Font.GothamBlack, TextSize = 9.5, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = ord(), ZIndex = 3 })
+        local mlist = {}
+        for u, v in pairs(g.members) do table.insert(mlist, { u = u, v = v }) end
+        table.sort(mlist, function(a, b) if a.u == g.owner then return true elseif b.u == g.owner then return false end return a.u < b.u end)
+        local function memberRow(u, d, tagText, tagColor, pendingRow)
+            local row = mk("Frame", infoScroll, { Size = UDim2.new(1, 0, 0, 44), BackgroundColor3 = rgb(16, 22, 34), LayoutOrder = ord(), ZIndex = 3, Corner = UDim.new(0, 12) })
+            mkAvatar(row, d or u, 30, u, UDim2.fromOffset(8, 7))
+            mk("TextLabel", row, { Size = UDim2.new(1, -130, 0, 15), Position = UDim2.fromOffset(46, 6), BackgroundTransparency = 1, Text = (u == me) and ((d or u) .. " (You)") or (d or u), TextColor3 = Colors.Text, Font = Enum.Font.GothamBold, TextSize = 11.5, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
+            local online = isOnline(u)
+            mk("TextLabel", row, { Size = UDim2.new(1, -130, 0, 12), Position = UDim2.fromOffset(46, 24), BackgroundTransparency = 1, Text = pendingRow and "Invitation pending" or (online and "● online" or "○ offline"), TextColor3 = pendingRow and Colors.Warning or (online and Colors.OnlineGreen or Colors.SubText), Font = Enum.Font.GothamMedium, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4 })
+            if tagText then
+                mk("TextLabel", row, { Size = UDim2.fromOffset(52, 16), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, (amOwner and u ~= me and not pendingRow) and -44 or -10, 0.5, 0), BackgroundColor3 = tagColor, BackgroundTransparency = 0.8, Text = tagText, TextColor3 = tagColor, Font = Enum.Font.GothamBlack, TextSize = 8, ZIndex = 4, Corner = UDim.new(1, 0) })
+            end
+            if amOwner and u ~= me and not pendingRow then
+                mkBtn(row, { Size = UDim2.fromOffset(28, 28), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), BackgroundColor3 = rgb(40, 18, 26), TextColor3 = Colors.Danger, ZIndex = 5, Corner = UDim.new(1, 0), TextSize = 11 }, "✕", function()
+                    GC.emit({ k = "k", g = gid, x = u, u = me, d = lp.DisplayName }); GC.openInfo(gid)
+                end)
+            end
+        end
+        for _, it in ipairs(mlist) do
+            memberRow(it.u, it.v.d, (it.u == g.owner) and "OWNER" or nil, Colors.Warning, false)
+        end
+        local plist = {}
+        for u, d in pairs(g.pending) do table.insert(plist, { u = u, d = d }) end
+        if #plist > 0 then
+            mk("TextLabel", infoScroll, { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, Text = "INVITED", TextColor3 = Colors.SubText, Font = Enum.Font.GothamBlack, TextSize = 9.5, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = ord(), ZIndex = 3 })
+            for _, it in ipairs(plist) do memberRow(it.u, it.d, "PENDING", Colors.Warning, true) end
+        end
+        actionBtn("⎋  Leave group", Colors.Danger, function()
+            GC.emit({ k = "l", g = gid, u = me, d = lp.DisplayName })
+            GC.viewGid = nil
+            GC.renderList()
+            showView("list", -1)
+        end)
+        showView("info", 1)
+    end
+
+    -- ---------------------------------------------------------
+    -- open / close
+    -- ---------------------------------------------------------
+    function GC.openUI()
+        if GC.open then return end
+        GC.open = true
+        root.Visible = true
+        root.Position = UDim2.new(0, 0, 0, 36)
+        Svc.Tween:Create(root, TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = UDim2.new(0, 0, 0, 0) }):Play()
+        for _, vv in pairs(views) do vv.Visible = false end
+        GC.renderList()
+        if GC.viewGid and GC.groups[GC.viewGid] then
+            GC.renderChat(GC.viewGid)
+            current = nil
+            showView("chat", 1)
+        else
+            current = nil
+            showView("list", 1)
+        end
+        GC.requestPresence()
+    end
+    function GC.close()
+        if not GC.open then return end
+        GC.open = false
+        Svc.Tween:Create(root, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Position = UDim2.new(0, 0, 0, 40) }):Play()
+        task.delay(0.24, function() if not GC.open then root.Visible = false end end)
+    end
+
+    -- ---------------------------------------------------------
+    -- state machine (event-sourced)
+    -- ---------------------------------------------------------
+    local function pushMsg(g, m, live)
+        m.t = m.t or os.time()
+        table.insert(g.msgs, m)
+        if #g.msgs > MAX_MSGS then table.remove(g.msgs, 1) end
+        g.last = m.t
+        local viewing = GC.open and GC.viewGid == g.id and current == vChat
+        if viewing then
+            GC.ord = (GC.ord or 0) + 1
+            m.n = GC.ord
+            buildBubble(g, m)
+            updateChatHeader(g)
+            scrollBottom(m.u == me)
+        elseif not m.s and m.u ~= me then
+            g.unread = (g.unread or 0) + 1
+        end
+        if GC.open and current == vList then GC.renderList() end
+        refreshBadge()
+        return viewing
+    end
+    local function sys(g, text, t, live) return pushMsg(g, { s = true, x = text, t = t }, live) end
+
+    local function ensureGroup(gid, name, owner)
+        local g = GC.groups[gid]
+        if not g then
+            g = { id = gid, name = name or "Group", owner = owner, members = {}, pending = {}, msgs = {}, unread = 0, created = os.time() }
+            GC.groups[gid] = g
+        end
+        return g
+    end
+
+    local function apply(ev, actor, live)
+        local k, gid = ev.k, ev.g
+        if type(k) ~= "string" or type(gid) ~= "string" then return end
+        local g = GC.groups[gid]
+        local t = tonumber(ev.t) or os.time()
+
+        if k == "c" then
+            if g then return end
+            local iv = type(ev.iv) == "table" and ev.iv or {}
+            local involved = (actor == me)
+            for _, it in ipairs(iv) do if type(it) == "table" and it.u == me then involved = true end end
+            if not involved then return end
+            g = ensureGroup(gid, tostring(ev.n or "Group"), actor)
+            g.created = t; g.last = t
+            g.members[actor] = { d = tostring(ev.d or actor), r = "owner" }
+            for _, it in ipairs(iv) do if type(it) == "table" and type(it.u) == "string" then g.pending[it.u] = tostring(it.d or it.u) end end
+            g.inviter = tostring(ev.d or actor)
+            if actor == me then
+                sys(g, "You created the group \"" .. g.name .. "\"", t, live)
+            elseif g.pending[me] then
+                g.last = t
+                if live then notify("Group invitation", string.format("%s invited you to \"%s\"", g.inviter, g.name), gid) end
+                refreshBadge()
+            end
+
+        elseif k == "i" then
+            local to = type(ev.to) == "table" and ev.to or nil
+            if not to or type(to.u) ~= "string" then return end
+            if g then
+                if not g.members[actor] then return end
+                if g.members[to.u] or g.pending[to.u] then return end
+                if cnt(g.members) + cnt(g.pending) >= MAX_MEMBERS then return end
+                g.pending[to.u] = tostring(to.d or to.u)
+                if g.members[me] then sys(g, string.format("%s invited %s", dispOf(actor, ev.d), tostring(to.d or to.u)), t, live) end
+            elseif to.u == me then
+                g = ensureGroup(gid, tostring(ev.n or "Group"), nil)
+                g.created = t; g.last = t
+                local owner
+                for _, it in ipairs(type(ev.mm) == "table" and ev.mm or {}) do
+                    if type(it) == "table" and type(it.u) == "string" then
+                        g.members[it.u] = { d = tostring(it.d or it.u), r = it.r }
+                        if it.r == "owner" then owner = it.u end
+                    end
+                end
+                g.owner = owner or actor
+                g.pending[me] = tostring(to.d or lp.DisplayName)
+                g.inviter = tostring(ev.d or actor)
+                if live then notify("Group invitation", string.format("%s invited you to \"%s\"", g.inviter, g.name), gid) end
+                refreshBadge()
+            end
+
+        elseif k == "a" then
+            if not g or ev.u ~= actor or not g.pending[actor] then return end
+            local d = g.pending[actor]
+            g.pending[actor] = nil
+            g.members[actor] = { d = tostring(ev.d or d), r = "member" }
+            g.last = t
+            if g.members[me] or actor == me then
+                if actor == me then
+                    sys(g, "You joined the group", t, live)
+                else
+                    local viewing = sys(g, string.format("%s joined the group", tostring(ev.d or d)), t, live)
+                    if live and not viewing then notify(g.name, string.format("%s joined the group", tostring(ev.d or d)), nil, 4) end
+                end
+            end
+
+        elseif k == "d" then
+            if not g or ev.u ~= actor or not g.pending[actor] then return end
+            local d = g.pending[actor]
+            g.pending[actor] = nil
+            if actor == me then
+                GC.groups[gid] = nil
+                if GC.viewGid == gid then GC.viewGid = nil end
+                if GC.open and current == vList then GC.renderList() end
+                refreshBadge()
+            elseif g.members[me] then
+                local viewing = sys(g, string.format("%s declined the invitation", tostring(ev.d or d)), t, live)
+                if live then notify(g.name, string.format("%s declined the invitation", tostring(ev.d or d)), nil, 5) end
+            end
+
+        elseif k == "l" then
+            if not g or ev.u ~= actor or not g.members[actor] then return end
+            local d = g.members[actor].d
+            g.members[actor] = nil
+            if actor == me then
+                GC.groups[gid] = nil
+                if GC.viewGid == gid then GC.viewGid = nil end
+                if GC.open and current == vList then GC.renderList() end
+                refreshBadge()
+                return
+            end
+            if g.owner == actor then
+                local nxt
+                for u in pairs(g.members) do if not nxt or u < nxt then nxt = u end end
+                g.owner = nxt
+                if nxt then g.members[nxt].r = "owner" end
+            end
+            if g.members[me] then sys(g, string.format("%s left the group", tostring(d)), t, live) end
+
+        elseif k == "k" then
+            if not g or g.owner ~= actor or not g.members[actor] then return end
+            local x = ev.x
+            if type(x) ~= "string" or x == actor or not g.members[x] then return end
+            local d = g.members[x].d
+            g.members[x] = nil
+            if x == me then
+                if live then notify(g.name, "You were removed from this group", nil, 5) end
+                GC.groups[gid] = nil
+                if GC.viewGid == gid then GC.viewGid = nil end
+                if GC.open and current == vChat then showView("list", -1) end
+                if GC.open then GC.renderList() end
+                refreshBadge()
+            elseif g.members[me] then
+                sys(g, string.format("%s was removed", tostring(d)), t, live)
+            end
+
+        elseif k == "r" then
+            if not g or g.owner ~= actor or not g.members[actor] then return end
+            g.name = tostring(ev.n or g.name)
+            if g.members[me] then sys(g, string.format("%s renamed the group to \"%s\"", tostring(ev.d or actor), g.name), t, live) end
+
+        elseif k == "m" then
+            if not g or ev.u ~= actor or not g.members[actor] or not g.members[me] then return end
+            if type(ev.x) ~= "string" or ev.x == "" then return end
+            local viewing = pushMsg(g, { u = actor, d = tostring(ev.d or actor), x = ev.x:sub(1, 300), t = t, id = ev.e }, live)
+            if actor ~= me and live and not viewing then
+                notify(g.name, string.format("%s: %s", trunc(tostring(ev.d or actor), 14), trunc(ev.x, 60)), nil, 4)
+                pcall(function() if not UI.mainFrame.Visible then triggerOrbToast(g.name, trunc(ev.x, 60)) end end)
+            end
+        end
+        save()
+    end
+
+    function GC.onPacket(msgStr, rawUserField, isReplay)
+        local body = msgStr:sub(8)
+        local ok, ev = pcall(function() return Svc.Http:JSONDecode(body) end)
+        if not ok or type(ev) ~= "table" or type(ev.e) ~= "string" then return end
+        if GC.seen[ev.e] then return end
+        GC.seen[ev.e] = true
+        table.insert(GC.seenList, ev.e)
+        local actorName = tostring(rawUserField or ""):match("^(.-)::") or tostring(rawUserField or "")
+        local actor = actorName:lower()
+        local live = (not isReplay) and (os.time() - (tonumber(ev.t) or 0) < 180)
+        local okA, errA = pcall(apply, ev, actor, live)
+        if not okA then warn("[TXR GC] " .. tostring(errA)) end
+    end
+
+    function GC.onPresence(msgStr, rawUserField, isReplay)
+        if isReplay then return end
+        local actorName = tostring(rawUserField or ""):match("^(.-)::") or tostring(rawUserField or "")
+        local disp = tostring(rawUserField or ""):match("^.-::(.*)$") or actorName
+        local low = actorName:lower()
+        if low == me or low == "system" then return end
+        GC.presence[low] = { t = os.clock(), disp = disp }
+        if S.knownDispNames then S.knownDispNames[low] = S.knownDispNames[low] or disp end
+        if msgStr:sub(9, 9) == "?" then
+            task.delay(0.15 + math.random() * 1.2, function() GC.heartbeat() end)
+        end
+    end
+
+    function GC.heartbeat()
+        task.spawn(function()
+            if not S.req then return end
+            pcall(function()
+                S.req({ Url = S.SERVER_URL .. "/send", Method = "POST", Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+                    Body = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "__GCP__:1", jobId = game.JobId, hidden = true }) })
+            end)
+        end)
+    end
+
+    function GC.emit(ev)
+        ev.e = newId("e")
+        ev.t = os.time()
+        GC.seen[ev.e] = true
+        table.insert(GC.seenList, ev.e)
+        pcall(apply, ev, me, true)
+        task.spawn(function()
+            if not S.req then return end
+            local payload = Svc.Http:JSONEncode({ user = lp.Name .. "::" .. lp.DisplayName, msg = "__GC__:" .. Svc.Http:JSONEncode(ev), jobId = game.JobId, hidden = true })
+            for attempt = 1, 3 do
+                local ok, res = pcall(function()
+                    return S.req({ Url = S.SERVER_URL .. "/send", Method = "POST", Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" }, Body = payload })
+                end)
+                if ok and res and (res.StatusCode == 200 or res.Status == 200) then break end
+                task.wait(0.8 * attempt)
+            end
+        end)
+    end
+
+    function GC.respond(gid, accept)
+        local g = GC.groups[gid]
+        if not g or not g.pending[me] then return end
+        GC.emit({ k = accept and "a" or "d", g = gid, u = me, d = lp.DisplayName })
+        if GC.open then GC.renderList() end
+        if accept then
+            notify(g.name or "Group", "You joined the group", nil, 3)
+            if GC.groups[gid] then GC.openChat(gid) end
+        end
+    end
+
+    function GC.sendText()
+        local gid = GC.viewGid
+        local g = gid and GC.groups[gid]
+        if not g or not g.members[me] then return end
+        local txt = gcInput.Text:gsub("^%s+", ""):gsub("%s+$", "")
+        if txt == "" then return end
+        if tick() - (GC.lastSend or 0) < 0.2 then return end
+        GC.lastSend = tick()
+        gcInput.Text = ""
+        GC.emit({ k = "m", g = gid, u = me, d = lp.DisplayName, x = txt:sub(1, 300) })
+        gcInput:CaptureFocus()
+    end
+
+    -- ---------------------------------------------------------
+    -- packet hook (works for live polls AND history replays) + offline catch-up
+    -- ---------------------------------------------------------
+    local origDI = checkAndTriggerDynamicIslandPacket
+    checkAndTriggerDynamicIslandPacket = function(msgStr, rawUserField, isReplay)
+        if type(msgStr) == "string" then
+            if msgStr:sub(1, 7) == "__GC__:" then
+                pcall(GC.onPacket, msgStr, rawUserField, isReplay)
+                return true
+            elseif msgStr:sub(1, 8) == "__GCP__:" then
+                pcall(GC.onPresence, msgStr, rawUserField, isReplay)
+                return true
+            end
+        end
+        return origDI(msgStr, rawUserField, isReplay)
+    end
+
+    task.spawn(function()
+        task.wait(1.0)
+        pcall(function()
+            if S.req then
+                local res = S.req({ Url = S.SERVER_URL .. "/messages?since=0", Method = "GET", Headers = { ["User-Agent"] = "Roblox/WinInet" } })
+                if res and (res.StatusCode == 200 or res.Status == 200) and res.Body then
+                    local dOk, data = pcall(function() return Svc.Http:JSONDecode(res.Body) end)
+                    if dOk and type(data) == "table" then
+                        for _, m in ipairs(data) do
+                            if type(m) == "table" and type(m.msg) == "string" and m.user and m.msg:sub(1, 7) == "__GC__:" then
+                                GC.onPacket(m.msg, m.user, true)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        GC.replayDone = true
+        pcall(GC.renderList)
+        local pend = 0
+        for _, g in pairs(GC.groups) do if g.pending and g.pending[me] then pend = pend + 1 end end
+        if pend > 0 then notify("Group invitations", string.format("You have %d pending invitation%s. Tap GC to respond.", pend, pend > 1 and "s" or ""), nil, 6) end
+        refreshBadge()
+        GC.heartbeat()
+    end)
+
+    task.spawn(function()
+        while _G.TXR_IsPolling and UI.gui and UI.gui.Parent do
+            task.wait(30)
+            GC.heartbeat()
+        end
+    end)
+
+    -- chat command: !gc / /gc
+    local origSendGC = S.sendMessageFunc
+    S.sendMessageFunc = function(overrideText)
+        local raw = overrideText or (UI.chatInput and UI.chatInput.Text) or ""
+        local low = tostring(raw):lower():gsub("^%s+", ""):gsub("%s+$", "")
+        if low == "!gc" or low == "/gc" or low == "!groups" then
+            if not overrideText and UI.chatInput then UI.chatInput.Text = "" end
+            GC.openUI()
+            return
+        end
+        -- extra AI agents (@nova, @sage, @lingo, @muse, @atlas, @pulse, @agents)
+        local key = low:match("^[@/](%a+)")
+        if key and key ~= "ai" and S.__aiAgents and (S.__aiAgents[key] or key == "agents") and S.__aiHandle then
+            local textCopy = tostring(raw)
+            origSendGC(overrideText)
+            task.spawn(function() pcall(S.__aiHandle, textCopy) end)
+            return
+        end
+        return origSendGC(overrideText)
+    end
+
+    GC.renderList()
+    refreshBadge()
 end)
